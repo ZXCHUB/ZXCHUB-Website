@@ -4,6 +4,8 @@ import { Code2, Globe2, Image as ImageIcon, Link as LinkIcon, Lock, Plus, Save, 
 import { db } from '../../firebase';
 import ImageCropper from '../../components/ImageCropper';
 import SEO from '../../components/SEO';
+import { useAuth } from '../../AuthContext';
+import { logActivity } from '../../utils/activityLog';
 
 type ScriptVisibility = 'public' | 'unlisted' | 'private';
 
@@ -18,6 +20,7 @@ const getVisibilityIcon = (visibility: ScriptVisibility) => {
 };
 
 export default function AdminScripts() {
+  const { user, profile } = useAuth();
   const [scripts, setScripts] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [scriptToDelete, setScriptToDelete] = useState<any>(null);
@@ -104,10 +107,24 @@ export default function AdminScripts() {
       if (editingId) {
         await updateDoc(doc(db, 'products', editingId), data);
         setScripts(current => current.map(script => script.id === editingId ? { ...script, ...data } : script));
+        await logActivity(profile ? { ...profile, uid: user?.uid } : { uid: user?.uid }, {
+          action: 'script_update',
+          targetType: 'script',
+          targetId: editingId,
+          targetTitle: cleanTitle,
+          details: `Updated script visibility to ${visibility}`
+        });
         showToast('Script updated.');
       } else {
         const ref = await addDoc(collection(db, 'products'), data);
         setScripts(current => [{ id: ref.id, ...data }, ...current]);
+        await logActivity(profile ? { ...profile, uid: user?.uid } : { uid: user?.uid }, {
+          action: 'script_create',
+          targetType: 'script',
+          targetId: ref.id,
+          targetTitle: cleanTitle,
+          details: `Published ${visibility} script`
+        });
         showToast('Script published.');
       }
       resetForm();
@@ -122,6 +139,13 @@ export default function AdminScripts() {
     try {
       await deleteDoc(doc(db, 'products', scriptToDelete.id));
       setScripts(current => current.filter(script => script.id !== scriptToDelete.id));
+      await logActivity(profile ? { ...profile, uid: user?.uid } : { uid: user?.uid }, {
+        action: 'script_delete',
+        targetType: 'script',
+        targetId: scriptToDelete.id,
+        targetTitle: scriptToDelete.title || 'Script',
+        details: 'Deleted script from library'
+      });
       showToast('Script deleted.');
     } catch (error) {
       console.error(error);

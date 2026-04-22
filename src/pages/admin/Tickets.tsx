@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, increment } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../AuthContext';
 import { MessageSquare, Send, XCircle, Paperclip } from 'lucide-react';
+import { logActivity } from '../../utils/activityLog';
 
 function readAttachment(file: File): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -89,6 +90,11 @@ export default function AdminTickets() {
     return () => unsub();
   }, [selectedTicketId, user?.uid]);
 
+  useEffect(() => {
+    if (!selectedTicket?.id || Number(selectedTicket.staffUnreadCount || 0) <= 0) return;
+    updateDoc(doc(db, 'tickets', selectedTicket.id), { staffUnreadCount: 0 }).catch(() => {});
+  }, [selectedTicket?.id, selectedTicket?.staffUnreadCount]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!newMessage.trim() && attachments.length === 0) || !selectedTicket || !user) return;
@@ -106,7 +112,20 @@ export default function AdminTickets() {
       await updateDoc(doc(db, 'tickets', selectedTicket.id), {
         updatedAt: Date.now(),
         lastMessage: newMessage || `${attachments.length} attachment(s)`,
+        lastSenderId: user.uid,
+        lastSenderName: profile?.displayName || profile?.email || 'Support',
+        lastSenderRole: profile?.role || 'admin',
+        userUnreadCount: increment(1),
+        staffUnreadCount: 0,
         status: 'active' // Re-open if it was closed and admin replies
+      });
+
+      await logActivity(profile ? { ...profile, uid: user.uid } : { uid: user.uid }, {
+        action: 'ticket_reply',
+        targetType: 'ticket',
+        targetId: selectedTicket.id,
+        targetTitle: selectedTicket.subject || 'Support Request',
+        details: `Replied to ${selectedTicket.userEmail || 'customer'}`
       });
       
       setNewMessage('');
@@ -122,6 +141,13 @@ export default function AdminTickets() {
       await updateDoc(doc(db, 'tickets', selectedTicket.id), {
         status: 'closed',
         updatedAt: Date.now()
+      });
+      await logActivity(profile ? { ...profile, uid: user?.uid } : { uid: user?.uid }, {
+        action: 'ticket_close',
+        targetType: 'ticket',
+        targetId: selectedTicket.id,
+        targetTitle: selectedTicket.subject || 'Support Request',
+        details: `Closed ticket from ${selectedTicket.userEmail || 'customer'}`
       });
     } catch (err) {
       console.error(err);
@@ -174,11 +200,18 @@ export default function AdminTickets() {
                 </div>
                 <div className="flex justify-between items-center">
                   <div className="text-sm text-slate-400 truncate pr-4">{ticket.lastMessage || 'No messages yet'}</div>
-                  {ticket.status === 'closed' ? (
-                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">Closed</span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {Number(ticket.staffUnreadCount || 0) > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded bg-orange-500 px-1.5 text-[10px] font-black text-black">
+                        {Number(ticket.staffUnreadCount || 0) > 99 ? '99+' : Number(ticket.staffUnreadCount || 0)}
+                      </span>
+                    )}
+                    {ticket.status === 'closed' ? (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">Closed</span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-xs text-slate-500 mt-2">From: {ticket.userEmail}</div>
               </div>

@@ -36,6 +36,7 @@ import { useAuth } from '../AuthContext';
 import Navbar from '../components/Navbar';
 import SEO from '../components/SEO';
 import BrandName from '../components/BrandName';
+import { logActivity } from '../utils/activityLog';
 
 const getCustomTabs = (product: any) => (
   Array.isArray(product?.customTabs)
@@ -285,6 +286,15 @@ export default function ProductPage() {
     } else {
       await updateDoc(doc(db, 'products', product.id), { commentsCount: increment(-1) });
       setProduct((current: any) => ({ ...current, commentsCount: Math.max(0, Number(current.commentsCount || 0) - 1) }));
+    }
+    if (canModerate) {
+      await logActivity(profile ? { ...profile, uid: user?.uid } : { uid: user?.uid }, {
+        action: replyId ? 'reply_delete' : 'comment_delete',
+        targetType: replyId ? 'reply' : 'comment',
+        targetId: replyId || commentId,
+        targetTitle: product.title || 'Script',
+        details: `Deleted ${replyId ? 'reply' : 'comment'} on ${product.title || 'script'}`
+      });
     }
     await fetchComments(product.id);
   };

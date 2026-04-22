@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, increment, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { Copy, Download, FileText, KeyRound, LogOut, MessageSquare, Paperclip, Save, Send, Settings, Ticket } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
@@ -25,11 +25,27 @@ export default function Profile() {
   const initialTab = (searchParams.get('tab') as ProfileTab) || 'purchases';
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setSupportUnreadCount(0);
+      return;
+    }
+
+    const q = query(collection(db, 'tickets'), where('userId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const total = snap.docs.reduce((sum, ticket) => sum + Number(ticket.data().userUnreadCount || 0), 0);
+      setSupportUnreadCount(total);
+    }, () => setSupportUnreadCount(0));
+
+    return () => unsub();
+  }, [user?.uid]);
 
   if (loading) return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Loading...</div>;
   if (!profile || !user) return <Navigate to="/" replace />;
@@ -72,7 +88,13 @@ export default function Profile() {
                 onClick={() => setActiveTab(id)}
                 className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-bold transition ${activeTab === id ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
               >
-                <Icon className="h-4 w-4" /> {label}
+                <Icon className="h-4 w-4" />
+                <span className="min-w-0 flex-1">{label}</span>
+                {id === 'tickets' && supportUnreadCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center bg-orange-500 px-1.5 text-[11px] font-black text-black">
+                    {supportUnreadCount > 99 ? '99+' : supportUnreadCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -312,6 +334,11 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, selectedTicketId]);
 
+  useEffect(() => {
+    if (!selectedTicket?.id || Number(selectedTicket.userUnreadCount || 0) <= 0) return;
+    updateDoc(doc(db, 'tickets', selectedTicket.id), { userUnreadCount: 0 }).catch(() => {});
+  }, [selectedTicket?.id, selectedTicket?.userUnreadCount]);
+
   const createTicket = async () => {
     const cleanSubject = subject.trim();
     const cleanMessage = message.trim();
@@ -326,7 +353,12 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
       status: 'active',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      lastMessage: cleanMessage
+      lastMessage: cleanMessage,
+      lastSenderId: user.uid,
+      lastSenderName: profile.displayName || profile.email,
+      lastSenderRole: 'user',
+      userUnreadCount: 0,
+      staffUnreadCount: 1
     });
     batch.set(doc(collection(db, `tickets/${ticketRef.id}/messages`)), {
       text: cleanMessage,
@@ -365,6 +397,11 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
     await updateDoc(doc(db, 'tickets', selectedTicket.id), {
       updatedAt: Date.now(),
       lastMessage: cleanReply || `${attachments.length} attachment(s)`,
+      lastSenderId: user.uid,
+      lastSenderName: profile.displayName || profile.email,
+      lastSenderRole: 'user',
+      userUnreadCount: 0,
+      staffUnreadCount: increment(1),
       status: 'active'
     });
     setReply('');
@@ -407,7 +444,14 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
                     <div className="truncate font-black text-white">{ticket.subject || 'Support Request'}</div>
                     <div className="mt-1 truncate text-xs text-zinc-500">{ticket.lastMessage || 'No messages yet'}</div>
                   </div>
-                  <span className={`shrink-0 px-2 py-1 text-[10px] font-black uppercase ${ticket.status === 'closed' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-500/10 text-emerald-300'}`}>{ticket.status || 'active'}</span>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    {Number(ticket.userUnreadCount || 0) > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center bg-orange-500 px-1.5 text-[10px] font-black text-black">
+                        {Number(ticket.userUnreadCount || 0) > 99 ? '99+' : Number(ticket.userUnreadCount || 0)}
+                      </span>
+                    )}
+                    <span className={`px-2 py-1 text-[10px] font-black uppercase ${ticket.status === 'closed' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-500/10 text-emerald-300'}`}>{ticket.status || 'active'}</span>
+                  </div>
                 </div>
                 <div className="mt-2 text-[11px] text-zinc-600">{new Date(ticket.updatedAt || ticket.createdAt || Date.now()).toLocaleString()}</div>
               </button>

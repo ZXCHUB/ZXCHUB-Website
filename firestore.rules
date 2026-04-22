@@ -135,6 +135,11 @@ service cloud.firestore {
       allow read: if isAdmin() || isModerator();
       allow create: if true;
     }
+    match /auditLogs/{logId} {
+      allow read: if isAdmin() || isModerator();
+      allow create: if isAdmin() || isModerator();
+      allow update, delete: if false;
+    }
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();

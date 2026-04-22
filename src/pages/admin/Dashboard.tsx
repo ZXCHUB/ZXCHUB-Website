@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { 
   DollarSign, ShoppingCart, Users, Activity, Eye, Globe, 
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
   const [revenueChartData, setRevenueChartData] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
 
   const [trafficChartData, setTrafficChartData] = useState<any[]>([]);
 
@@ -61,11 +62,15 @@ export default function AdminDashboard() {
     const unsubPv = onSnapshot(collection(db, 'pageviews'), (snap) => {
       setAllPageviews(snap.docs.map(d => d.data() as any));
     });
+    const unsubActivity = onSnapshot(query(collection(db, 'auditLogs'), orderBy('createdAt', 'desc'), limit(8)), (snap) => {
+      setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    });
 
     return () => {
       unsubTx();
       unsubUsers();
       unsubPv();
+      unsubActivity();
     };
   }, []);
 
@@ -337,6 +342,8 @@ export default function AdminDashboard() {
             <StatCard title="New Customers" value={stats.customers.toString()} icon={Users} trend="" />
           </div>
 
+          <ActivityLogPanel logs={activityLogs} />
+
           {/* Chart */}
           <div className="bg-[#161d2b] border border-[#222b3d] rounded-xl p-6">
             <h3 className="text-lg font-bold mb-6">Revenue & Orders</h3>
@@ -492,6 +499,57 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function formatAction(action: string) {
+  const labels: Record<string, string> = {
+    script_create: 'Published script',
+    script_update: 'Updated script',
+    script_delete: 'Deleted script',
+    ticket_reply: 'Replied to ticket',
+    ticket_close: 'Closed ticket',
+    comment_delete: 'Deleted comment',
+    reply_delete: 'Deleted reply'
+  };
+  return labels[action] || action.replace(/_/g, ' ');
+}
+
+function ActivityLogPanel({ logs }: { logs: any[] }) {
+  return (
+    <div className="bg-[#161d2b] border border-[#222b3d] rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between border-b border-[#222b3d] p-6">
+        <div>
+          <h3 className="text-lg font-bold">Team Activity</h3>
+          <p className="mt-1 text-sm text-slate-500">Recent moderator and admin actions.</p>
+        </div>
+        <Activity className="h-5 w-5 text-orange-400" />
+      </div>
+      <div className="divide-y divide-[#222b3d]">
+        {logs.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-slate-500">No activity logged yet.</div>
+        ) : logs.map(log => (
+          <div key={log.id} className="flex flex-col gap-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-white">{formatAction(log.action)}</span>
+                <span className="rounded bg-orange-500/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-orange-300">
+                  {log.actorRole || 'team'}
+                </span>
+              </div>
+              <div className="mt-1 truncate text-sm text-slate-400">
+                {log.targetTitle || log.targetId || 'Unknown target'}
+                {log.details ? <span className="text-slate-600"> - {log.details}</span> : null}
+              </div>
+            </div>
+            <div className="shrink-0 text-left text-xs text-slate-500 sm:text-right">
+              <div className="font-bold text-slate-300">{log.actorName || 'Team member'}</div>
+              <div>{log.createdAt ? new Date(log.createdAt).toLocaleString() : '-'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
