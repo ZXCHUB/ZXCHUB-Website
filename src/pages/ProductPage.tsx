@@ -330,11 +330,25 @@ export default function ProductPage() {
 
   if (loading) return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Loading...</div>;
   if (!product) return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Script not found</div>;
-  if (product.visibility === 'private' && profile?.role !== 'admin') {
+  if (product.visibility === 'private' && profile?.role !== 'admin' && profile?.role !== 'moderator') {
     return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Script not found</div>;
   }
 
   const customTabs = getCustomTabs(product);
+  const publishedAt = product.createdAt ? new Date(product.createdAt).toLocaleDateString() : 'Published';
+  const media = embedUrl ? (
+    <iframe
+      src={embedUrl}
+      title={product.title}
+      className="aspect-video w-full"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowFullScreen
+    />
+  ) : product.image ? (
+    <img src={product.image} alt={product.title} className="aspect-video w-full object-cover" referrerPolicy="no-referrer" />
+  ) : (
+    <div className="aspect-video bg-zinc-900" />
+  );
 
   return (
     <div className="min-h-screen bg-[#050507] pb-20 text-white">
@@ -346,106 +360,105 @@ export default function ProductPage() {
       <Navbar />
 
       <main className="mx-auto max-w-7xl px-4 py-8 pt-28 sm:px-6 sm:pt-32 lg:px-8">
-        <Link to="/scripts" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition-colors hover:text-white">
+        <Link to="/scripts" className="mb-7 inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition-colors hover:text-white">
           <ArrowLeft className="h-4 w-4" /> Back to Scripts
         </Link>
 
-        <section className="overflow-hidden border border-white/10 bg-[#0a0607] shadow-[0_28px_90px_rgba(0,0,0,.35)]">
-          <div className="grid gap-0 lg:grid-cols-[1.35fr_1fr]">
-            <div className="p-5 sm:p-7">
-              <div className="mb-5 flex items-start gap-4">
-                {product.image ? (
-                  <img src={product.image} alt="" className="h-16 w-16 shrink-0 object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="h-16 w-16 shrink-0 bg-red-600" />
-                )}
-                <div className="min-w-0">
-                  <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl">Script - {product.title}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-                    <BrandName className="text-sm" />
-                    <span className="text-zinc-600">-</span>
-                    <span className="text-zinc-500">{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : 'Published'}</span>
-                    <button onClick={handleShare} className="inline-flex items-center gap-1 text-zinc-400 transition hover:text-white">
-                      {shared ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
-                      {shared ? 'Copied' : 'Share'}
-                    </button>
+        <section className="overflow-hidden border border-white/10 bg-[#08080b] shadow-[0_30px_100px_rgba(0,0,0,.45)]">
+          <div className="grid lg:grid-cols-[minmax(0,1.45fr)_24rem]">
+            <div className="min-w-0">
+              <div className="border-b border-white/10 p-5 sm:p-7">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                  {product.image ? (
+                    <img src={product.image} alt="" className="h-20 w-20 shrink-0 object-cover ring-1 ring-white/10" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center bg-red-600 font-black">ZX</div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-zinc-500">
+                      <BrandName className="text-sm" />
+                      <span>{publishedAt}</span>
+                      <button onClick={handleShare} className="inline-flex items-center gap-1.5 text-zinc-400 transition hover:text-white">
+                        {shared ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
+                        {shared ? 'Copied' : 'Share'}
+                      </button>
+                    </div>
+                    <h1 className="max-w-3xl text-3xl font-black leading-tight text-white sm:text-5xl">
+                      {product.title}
+                    </h1>
                   </div>
-                </div>
-                <div className="ml-auto hidden items-center gap-2 border border-white/10 bg-black/35 px-4 py-2 text-sm font-black text-zinc-300 sm:flex">
-                  <Eye className="h-4 w-4 text-red-500" /> {Number(product.views || 0)} views
+                  <div className="flex w-fit items-center gap-2 border border-white/10 bg-black/40 px-4 py-2 text-sm font-black text-zinc-300">
+                    <Eye className="h-4 w-4 text-red-500" /> {Number(product.views || 0)} views
+                  </div>
                 </div>
               </div>
 
-              <div className="overflow-hidden border border-white/10 bg-black">
-                {embedUrl ? (
-                  <iframe
-                    src={embedUrl}
-                    title={product.title}
-                    className="aspect-video w-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
-                ) : product.image ? (
-                  <img src={product.image} alt={product.title} className="aspect-video w-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="aspect-video bg-zinc-900" />
-                )}
+              <div className="bg-black p-3 sm:p-5">
+                <div className="overflow-hidden border border-white/10 bg-[#050507]">
+                  {media}
+                </div>
               </div>
             </div>
 
-            <aside className="border-t border-white/10 bg-[#10090a] p-5 sm:p-7 lg:border-l lg:border-t-0">
-              <div className="grid grid-cols-3 gap-3">
-                <button onClick={() => handleScriptReaction('like')} className={`flex h-16 items-center justify-center gap-2 border text-sm font-black transition ${liked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
+            <aside className="flex flex-col border-t border-white/10 bg-[#0d0809] p-5 sm:p-7 lg:border-l lg:border-t-0">
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => handleScriptReaction('like')} className={`flex min-h-16 flex-col items-center justify-center gap-1 border text-sm font-black transition ${liked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
                   <ThumbsUp className="h-5 w-5" /> {Number(product.likes || 0)}
                 </button>
-                <button onClick={() => handleScriptReaction('dislike')} className={`flex h-16 items-center justify-center gap-2 border text-sm font-black transition ${disliked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
+                <button onClick={() => handleScriptReaction('dislike')} className={`flex min-h-16 flex-col items-center justify-center gap-1 border text-sm font-black transition ${disliked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
                   <ThumbsDown className="h-5 w-5" /> {Number(product.dislikes || 0)}
                 </button>
-                <div className="flex h-16 items-center justify-center gap-2 border border-white/10 bg-black/35 text-sm font-black text-zinc-300">
+                <div className="flex min-h-16 flex-col items-center justify-center gap-1 border border-white/10 bg-black/35 text-sm font-black text-zinc-300">
                   <MessageCircle className="h-5 w-5" /> {Number(product.commentsCount || comments.length || 0)}
                 </div>
               </div>
 
               <button
                 onClick={handleCopyCode}
-                className={`mt-5 flex min-h-14 w-full items-center justify-center gap-2 text-sm font-black uppercase tracking-wide text-white transition ${copiedCode ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-500'}`}
+                className={`mt-5 flex min-h-14 w-full items-center justify-center gap-2 text-sm font-black uppercase text-white transition ${copiedCode ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-500'}`}
               >
                 <Copy className="h-4 w-4" /> {copiedCode ? 'Copied' : 'Copy Script'}
               </button>
 
-              <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="mt-5 grid gap-3">
                 {product.gameLink ? (
-                  <a href={product.gameLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300">
-                    <Gamepad2 className="h-4 w-4" /> Play
-                  </a>
+                  <>
+                    <a href={product.gameLink} target="_blank" rel="noreferrer" className="flex min-h-11 items-center justify-between border border-emerald-500/20 bg-emerald-500/5 px-4 text-sm font-bold text-emerald-300 transition hover:bg-emerald-500/10">
+                      <span className="inline-flex items-center gap-2"><Gamepad2 className="h-4 w-4" /> Play Roblox Game</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
+                    <a href={product.gameLink} target="_blank" rel="noreferrer" className="flex min-h-11 items-center justify-between border border-white/10 bg-black/25 px-4 text-sm font-bold text-zinc-300 transition hover:bg-white/5">
+                      <span className="inline-flex items-center gap-2"><LinkIcon className="h-4 w-4" /> Open Game Link</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </>
                 ) : (
-                  <span className="inline-flex items-center gap-2 text-zinc-600"><Gamepad2 className="h-4 w-4" /> Universal</span>
+                  <div className="flex min-h-11 items-center gap-2 border border-white/10 bg-black/25 px-4 text-sm font-bold text-zinc-500">
+                    <Gamepad2 className="h-4 w-4" /> Universal script
+                  </div>
                 )}
-                {product.gameLink ? (
-                  <a href={product.gameLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300">
-                    <LinkIcon className="h-4 w-4" /> Game Link
-                  </a>
-                ) : null}
               </div>
 
-              <Link to="/get-key" className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 border border-red-500/30 bg-red-500/10 px-6 text-sm font-black uppercase tracking-wide text-red-200 transition hover:bg-red-600 hover:text-white">
+              <div className="mt-6 border-t border-white/10 pt-5 text-sm leading-6 text-zinc-400">
+                One ZXCHUB key unlocks access for supported scripts. Keep your key private and open a support ticket if activation fails.
+              </div>
+
+              <Link to="/get-key" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 border border-red-500/30 bg-red-500/10 px-6 text-sm font-black uppercase text-red-100 transition hover:bg-red-600 hover:text-white">
                 Get Key <ArrowRight className="h-4 w-4" />
               </Link>
             </aside>
           </div>
         </section>
 
-        <section className="mt-8 border border-white/10 bg-[#0a0607] p-6 sm:p-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-3xl font-black">Description</h2>
-              <div className="mt-6 whitespace-pre-wrap break-words text-base leading-8 text-zinc-300">
-                {product.description || <span className="text-zinc-500 italic">No description yet.</span>}
-              </div>
-            </div>
-            <Link to="/get-key" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 bg-red-600 px-6 text-sm font-black uppercase text-white hover:bg-red-500">
+        <section className="mt-8 border border-white/10 bg-[#08080b] p-6 sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <h2 className="text-3xl font-black">Description</h2>
+            <Link to="/get-key" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 bg-red-600 px-6 text-sm font-black uppercase text-white transition hover:bg-red-500">
               Get Key
             </Link>
+          </div>
+          <div className="mt-6 max-w-4xl whitespace-pre-wrap break-words text-base leading-8 text-zinc-300">
+            {product.description || <span className="text-zinc-500 italic">No description yet.</span>}
           </div>
 
           {customTabs.length > 0 && (
@@ -461,7 +474,7 @@ export default function ProductPage() {
         </section>
 
         {product.scriptCode && (
-          <section className="mt-8 overflow-hidden border border-white/10 bg-[#0a0607]">
+          <section className="mt-8 overflow-hidden border border-white/10 bg-[#08080b]">
             <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-xl font-black">Script Code</h2>
@@ -478,11 +491,11 @@ export default function ProductPage() {
                 </button>
               </div>
             </div>
-            <pre className="m-4 max-h-[32rem] overflow-auto bg-[#16090a] p-5 text-sm leading-7 text-zinc-200"><code>{product.scriptCode}</code></pre>
+            <pre className="m-4 max-h-[32rem] overflow-auto bg-[#120708] p-5 font-mono text-sm leading-7 text-zinc-100 shadow-inner shadow-black/40"><code>{product.scriptCode}</code></pre>
           </section>
         )}
 
-        <section className="mt-8 border border-white/10 bg-[#0a0607] p-5 sm:p-7">
+        <section className="mt-8 border border-white/10 bg-[#08080b] p-5 sm:p-7">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="text-3xl font-black">Comments</h2>
             <span className="text-sm font-bold text-zinc-500">{comments.length} comments</span>
