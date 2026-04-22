@@ -97,13 +97,13 @@ export default function AdminDiscord() {
 
     try {
       const idToken = await user.getIdToken();
-      const response = await fetch('/api/discord/force-rejoin', {
+      const response = await fetch('/api/discord/give-role', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${idToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({ action: 'force-rejoin' })
       });
       const data = await response.json();
 
