@@ -13,10 +13,13 @@ service cloud.firestore {
       );
     }
 
-    function isSupport() {
+    function isModerator() {
       return isAuthenticated() && (
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+        )
       );
     }
     
@@ -50,7 +53,31 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if true;
         allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-        allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+        allow update: if isAdmin() || isModerator() || (isAuthenticated() && (
+          resource.data.userId == request.auth.uid ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes', 'repliesCount'])
+        ));
+        allow delete: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+
+        match /reactions/{userId} {
+          allow read: if true;
+          allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
+        }
+
+        match /replies/{replyId} {
+          allow read: if true;
+          allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+          allow update: if isAdmin() || isModerator() || (isAuthenticated() && (
+            resource.data.userId == request.auth.uid ||
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes'])
+          ));
+          allow delete: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+
+          match /reactions/{userId} {
+            allow read: if true;
+            allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
+          }
+        }
       }
     }
 
@@ -73,18 +100,18 @@ service cloud.firestore {
     }
 
     match /tickets/{ticketId} {
-      allow read: if isAdmin() || isSupport() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin() || isSupport() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow delete: if isAdmin() || isSupport();
+      allow update: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || isModerator();
       
       match /messages/{messageId} {
-         allow read: if isAdmin() || isSupport() || (isAuthenticated() && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid);
-         allow create: if isAdmin() || isSupport() || (isAuthenticated() && (
+         allow read: if isAdmin() || isModerator() || (isAuthenticated() && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid);
+         allow create: if isAdmin() || isModerator() || (isAuthenticated() && (
             (exists(/databases/$(database)/documents/tickets/$(ticketId)) && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid) ||
             request.resource.data.ticketUserId == request.auth.uid
          ));
-         allow update, delete: if isAdmin() || isSupport();
+         allow update, delete: if isAdmin() || isModerator();
       }
     }
 

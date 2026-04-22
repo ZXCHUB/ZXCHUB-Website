@@ -19,7 +19,7 @@ export default function AdminTeam() {
 
   const fetchTeam = async () => {
     try {
-      const q = query(collection(db, 'users'), where('role', 'in', ['admin', 'support']));
+      const q = query(collection(db, 'users'), where('role', 'in', ['admin', 'moderator', 'support']));
       const snap = await getDocs(q);
       const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTeam(members);
@@ -77,7 +77,7 @@ export default function AdminTeam() {
 
       <div>
         <h1 className="text-2xl font-bold">Team Management</h1>
-        <p className="text-sm text-slate-400 mt-1">Manage administrators and support staff.</p>
+        <p className="text-sm text-slate-400 mt-1">Manage administrators and moderators.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -129,7 +129,7 @@ export default function AdminTeam() {
                           className="bg-[#0f172a] border border-[#222b3d] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
                         >
                           <option value="admin">Admin</option>
-                          <option value="support">Support</option>
+                          <option value="moderator">Moderator</option>
                           <option value="user">Remove from Team (Make User)</option>
                         </select>
                       </td>
@@ -163,7 +163,7 @@ export default function AdminTeam() {
                 name="role"
                 className="w-full bg-[#0f172a] border border-[#222b3d] rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               >
-                <option value="support">Support (Tickets only)</option>
+                <option value="moderator">Moderator (Tickets and comments)</option>
                 <option value="admin">Admin (Full Access)</option>
               </select>
             </div>
@@ -177,7 +177,7 @@ export default function AdminTeam() {
           
           <div className="mt-6 pt-6 border-t border-[#222b3d] text-sm text-slate-400 space-y-2">
             <p><strong>Admin:</strong> Has full access to all settings, scripts, and orders.</p>
-            <p><strong>Support:</strong> Can only access the Tickets section to help customers.</p>
+            <p><strong>Moderator:</strong> Can access Tickets and moderate comments.</p>
           </div>
         </div>
       </div>

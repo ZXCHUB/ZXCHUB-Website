@@ -119,7 +119,7 @@ export default function Navbar() {
             </Link>
 
             <div className="hidden items-center gap-6 md:flex">
-              <Link to="/products" className="font-medium text-zinc-300 transition-colors hover:text-white">Scripts</Link>
+              <Link to="/scripts" className="font-medium text-zinc-300 transition-colors hover:text-white">Scripts</Link>
               <Link to="/get-key" className="font-medium text-zinc-300 transition-colors hover:text-white">Get Key</Link>
               <a href="https://discord.gg/zxchub" target="_blank" rel="noreferrer" className="font-medium text-zinc-300 transition-colors hover:text-white">
                 Discord
@@ -156,7 +156,7 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center justify-center gap-6 border-t border-zinc-800/50 py-2 text-sm md:hidden">
-            <Link to="/products" className="font-medium text-zinc-300 transition-colors hover:text-white">Scripts</Link>
+            <Link to="/scripts" className="font-medium text-zinc-300 transition-colors hover:text-white">Scripts</Link>
             <Link to="/get-key" className="font-medium text-zinc-300 transition-colors hover:text-white">Get Key</Link>
             <a href="https://discord.gg/zxchub" target="_blank" rel="noreferrer" className="font-medium text-zinc-300 transition-colors hover:text-white">Discord</a>
           </div>

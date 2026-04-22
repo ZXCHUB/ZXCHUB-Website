@@ -24,6 +24,7 @@ export default function AdminScripts() {
   const [title, setTitle] = useState('');
   const [gameLink, setGameLink] = useState('');
   const [image, setImage] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
   const [description, setDescription] = useState('');
   const [isPaid, setIsPaid] = useState(false);
   const [scriptCode, setScriptCode] = useState('');
@@ -50,6 +51,7 @@ export default function AdminScripts() {
     setTitle('');
     setGameLink('');
     setImage('');
+    setVideoUrl('');
     setDescription('');
     setIsPaid(false);
     setScriptCode('');
@@ -61,6 +63,7 @@ export default function AdminScripts() {
     setTitle(script.title || '');
     setGameLink(script.gameLink || script.placeId || '');
     setImage(script.image || '');
+    setVideoUrl(script.videoUrl || '');
     setDescription(script.description || '');
     setIsPaid(Boolean(script.isPaid));
     setScriptCode(script.scriptCode || '');
@@ -83,6 +86,7 @@ export default function AdminScripts() {
       title: cleanTitle,
       gameLink: gameLink.trim(),
       image,
+      videoUrl: videoUrl.trim(),
       description: cleanDescription,
       isPaid,
       isFree: !isPaid,
@@ -194,6 +198,19 @@ export default function AdminScripts() {
             <p className="mb-3 text-xs font-bold text-zinc-500">Make it eye-catching. Image will be cropped to 16:9 aspect ratio.</p>
             <ImageCropper currentImage={image} onImageCropped={setImage} aspectRatio={16 / 9} />
           </div>
+
+          <label>
+            <span className="mb-2 flex items-center gap-2 text-sm font-black text-zinc-200">
+              <LinkIcon className="h-4 w-4" /> YouTube Video URL
+            </span>
+            <input
+              value={videoUrl}
+              onChange={event => setVideoUrl(event.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="w-full border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500"
+            />
+            <div className="mt-2 text-xs font-bold text-zinc-500">If set, the script page uses this video instead of the thumbnail. The script library still uses the thumbnail.</div>
+          </label>
 
           <label>
             <span className="mb-2 flex items-center gap-2 text-sm font-black text-zinc-200">

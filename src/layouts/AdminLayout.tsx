@@ -80,13 +80,13 @@ export default function AdminLayout() {
     return <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center text-zinc-400">Loading...</div>;
   }
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'support')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'moderator' && profile.role !== 'support')) {
     return <Navigate to="/" replace />;
   }
 
   const isPathActive = (path: string) => location.pathname === path;
   const isPathPrefixActive = (prefix: string) => location.pathname.startsWith(prefix);
-  const isSupport = profile.role === 'support';
+  const isSupport = profile.role === 'moderator' || profile.role === 'support';
 
   if (isSupport && location.pathname === '/admin') {
     return <Navigate to="/admin/orders/tickets" replace />;

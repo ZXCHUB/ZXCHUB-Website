@@ -20,7 +20,7 @@ export default function SEO({
 }: SEOProps) {
   const currentUrl = url || window.location.href;
   const currentPath = new URL(currentUrl).pathname;
-  const productSlug = currentPath.startsWith('/product/') ? currentPath.split('/product/')[1]?.split('/')[0] : '';
+  const productSlug = currentPath.startsWith('/script/') ? currentPath.split('/script/')[1]?.split('/')[0] : '';
   const fullImageUrl = image.startsWith('data:image/') && productSlug
     ? `${window.location.origin}/api/product-image?slug=${encodeURIComponent(productSlug)}`
     : image.startsWith('/') && window.location.origin 

@@ -8,7 +8,7 @@ interface UserProfile {
   email: string;
   displayName: string;
   photoURL: string;
-  role: 'admin' | 'user' | 'support';
+  role: 'admin' | 'user' | 'moderator' | 'support';
   discordId?: string;
   discordUsername?: string;
   discordAccessToken?: string;
@@ -23,6 +23,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   login: () => Promise<any>;
+  linkDiscord: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -32,6 +33,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const linkDiscord = () => new Promise<void>((resolve, reject) => {
+    if (!auth.currentUser) {
+      reject(new Error('Sign in before linking Discord.'));
+      return;
+    }
+
+    const popup = window.open(
+      `/api/discord/auth-url?uid=${encodeURIComponent(auth.currentUser.uid)}`,
+      'zxchub-discord-link',
+      'width=520,height=720'
+    );
+
+    if (!popup) {
+      reject(new Error('Popup was blocked. Allow popups and try again.'));
+      return;
+    }
+
+    const cleanup = () => {
+      window.removeEventListener('message', handleMessage);
+      window.clearInterval(checkClosed);
+    };
+
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'discord_auth_success') return;
+
+      try {
+        await updateDoc(doc(db, 'users', auth.currentUser!.uid), event.data.data);
+        cleanup();
+        popup.close();
+        resolve();
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    };
+
+    const checkClosed = window.setInterval(() => {
+      if (popup.closed) {
+        cleanup();
+        reject(new Error('Discord linking was cancelled.'));
+      }
+    }, 700);
+
+    window.addEventListener('message', handleMessage);
+  });
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
@@ -97,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login: loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, login: loginWithGoogle, linkDiscord, logout }}>
       {children}
     </AuthContext.Provider>
   );

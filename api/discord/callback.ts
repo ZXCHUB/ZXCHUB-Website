@@ -47,6 +47,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     });
 
     const discordUser = userRes.data;
+
+    if (settings?.token && settings?.guildId) {
+      try {
+        await axios.put(
+          `https://discord.com/api/guilds/${settings.guildId}/members/${discordUser.id}`,
+          { access_token: tokens.access_token },
+          {
+            headers: {
+              Authorization: `Bot ${settings.token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+      } catch (joinError: any) {
+        console.log('Discord guild join skipped or failed:', joinError.response?.data || joinError.message);
+      }
+    }
+
     const payload = JSON.stringify({
       discordId: discordUser.id,
       discordUsername: discordUser.username,

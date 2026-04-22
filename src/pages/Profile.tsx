@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { addDoc, collection, doc, getDocs, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, query, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { Copy, Download, FileText, KeyRound, LogOut, MessageSquare, Save, Send, Settings, Ticket } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import Navbar from '../components/Navbar';
 import SEO from '../components/SEO';
+import ImageCropper from '../components/ImageCropper';
 
 type ProfileTab = 'purchases' | 'invoices' | 'tickets' | 'settings';
 
@@ -49,8 +50,19 @@ export default function Profile() {
       <main className="mx-auto grid max-w-7xl gap-8 px-4 py-10 pt-28 md:grid-cols-[18rem_1fr] sm:px-6 lg:px-8">
         <aside className="border border-white/10 bg-[#08080b] p-4 md:sticky md:top-24 md:self-start">
           <div className="mb-5 border-b border-white/10 pb-5">
-            <div className="font-black">{profile.displayName || profile.email}</div>
-            <div className="mt-1 truncate text-sm text-zinc-500">{profile.email}</div>
+            <div className="flex items-center gap-3">
+              {profile.photoURL ? (
+                <img src={profile.photoURL} alt={profile.displayName || profile.email} className="h-12 w-12 rounded-full object-cover ring-2 ring-red-500/30" />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-lg font-black text-white">
+                  {(profile.displayName || profile.email || 'U').slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="truncate font-black">{profile.displayName || profile.email}</div>
+                <div className="mt-1 truncate text-sm text-zinc-500">{profile.email}</div>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -320,6 +332,22 @@ function SettingsTab({ profile, showToast }: { profile: any; showToast: any }) {
     <div className="max-w-2xl">
       <h1 className="mb-7 text-3xl font-black">Settings</h1>
       <div className="space-y-5">
+        <div>
+          <span className="mb-3 block text-sm font-bold text-zinc-400">Avatar</span>
+          <div className="mb-4 flex items-center gap-4">
+            {photoURL ? (
+              <img src={photoURL} alt={displayName || profile.email} className="h-20 w-20 rounded-full object-cover ring-2 ring-red-500/30" />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-600 text-2xl font-black text-white">
+                {(displayName || profile.email || 'U').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="text-sm leading-6 text-zinc-500">
+              Upload an image from your PC, crop it, and save it as your profile avatar.
+            </div>
+          </div>
+          <ImageCropper currentImage={photoURL} onImageCropped={setPhotoURL} aspectRatio={1} circularCrop />
+        </div>
         <label className="block">
           <span className="mb-2 block text-sm font-bold text-zinc-400">Display Name</span>
           <input value={displayName} onChange={event => setDisplayName(event.target.value)} className="w-full border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500" />

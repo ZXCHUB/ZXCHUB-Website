@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CreditCard, ExternalLink, Gamepad2, KeyRound, Play, WalletCards } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import SEO from '../components/SEO';
 import { PAID_WEB_KEY_PLANS, ZXCHUB_KEY_PLANS } from '../keyPlans';
 import BrandName from '../components/BrandName';
+import { useAuth } from '../AuthContext';
 
 type Method = 'free' | 'robux' | 'paypal' | 'card' | 'funpay';
 
@@ -25,9 +26,13 @@ const externalLinks = {
 
 export default function GetKey() {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { user, profile, login, linkDiscord } = useAuth();
   const requestedMethod = params.get('method') as Method | null;
   const [activeMethod, setActiveMethod] = useState<Method>(requestedMethod || 'free');
   const [selectedPlanId, setSelectedPlanId] = useState(ZXCHUB_KEY_PLANS[1].id);
+  const [authError, setAuthError] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
     if (requestedMethod && methods.some(method => method.id === requestedMethod)) {
@@ -43,6 +48,37 @@ export default function GetKey() {
   const selectedPlan = PAID_WEB_KEY_PLANS.find(plan => plan.id === selectedPlanId) || PAID_WEB_KEY_PLANS[0];
   const isPaidWebMethod = activeMethod === 'paypal' || activeMethod === 'card';
   const accent = activeMethod === 'paypal' || activeMethod === 'funpay' ? 'text-sky-400' : 'text-red-400';
+
+  const ensureDiscord = async () => {
+    setAuthError('');
+    setAuthBusy(true);
+    try {
+      if (!user) {
+        await login();
+      }
+      if (!profile?.discordId) {
+        await linkDiscord();
+      }
+      return true;
+    } catch (error: any) {
+      setAuthError(error.message || 'Discord authorization failed.');
+      return false;
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const openExternal = async (url: string) => {
+    if (await ensureDiscord()) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const goToCheckout = async () => {
+    if (await ensureDiscord()) {
+      navigate(`/checkout/key/${selectedPlan.id}?method=${activeMethod}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#050507] text-white">
@@ -79,20 +115,26 @@ export default function GetKey() {
         </div>
 
         <section className="border border-white/10 bg-[#08080b] p-6 shadow-[0_22px_90px_rgba(0,0,0,.35)] sm:p-9">
+          {authError && <div className="mb-6 border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">{authError}</div>}
+          {!profile?.discordId && (
+            <div className="mb-6 border border-white/10 bg-black/40 p-4 text-sm text-zinc-300">
+              To get a key, sign in and link Discord first. If you are not in the server, the Discord bot will add you during authorization.
+            </div>
+          )}
           {activeMethod === 'free' && (
             <div className="py-10 text-center">
               <h2 className="text-3xl font-black uppercase tracking-wide">Free Key System</h2>
               <p className="mx-auto mt-5 max-w-2xl text-zinc-400">
                 Watch a few ads through the gateway and generate a temporary <BrandName className="inline" /> key.
               </p>
-              <a
-                href={externalLinks.free}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => openExternal(externalLinks.free)}
+                disabled={authBusy}
                 className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 bg-red-600 px-8 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-red-500"
               >
-                Generate Free Key <ExternalLink className="h-4 w-4" />
-              </a>
+                {authBusy ? 'Authorizing...' : 'Generate Free Key'} <ExternalLink className="h-4 w-4" />
+              </button>
             </div>
           )}
 
@@ -114,14 +156,14 @@ export default function GetKey() {
                   <li>3. After purchase, open a ticket in Discord if you need help activating your key.</li>
                 </ol>
               </div>
-              <a
-                href={externalLinks.robux}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => openExternal(externalLinks.robux)}
+                disabled={authBusy}
                 className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 bg-emerald-600 px-8 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-emerald-500"
               >
-                Buy Now <ExternalLink className="h-4 w-4" />
-              </a>
+                {authBusy ? 'Authorizing...' : 'Buy Now'} <ExternalLink className="h-4 w-4" />
+              </button>
             </div>
           )}
 
@@ -157,12 +199,14 @@ export default function GetKey() {
                 </ol>
               </div>
 
-              <Link
-                to={`/checkout/key/${selectedPlan.id}?method=${activeMethod}`}
+              <button
+                type="button"
+                onClick={goToCheckout}
+                disabled={authBusy}
                 className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 bg-white px-8 py-3 text-sm font-black uppercase tracking-wide text-black transition hover:bg-zinc-200"
               >
-                Buy {selectedPlan.name} Key <ExternalLink className="h-4 w-4" />
-              </Link>
+                {authBusy ? 'Authorizing...' : `Buy ${selectedPlan.name} Key`} <ExternalLink className="h-4 w-4" />
+              </button>
             </div>
           )}
 
@@ -184,14 +228,14 @@ export default function GetKey() {
                   <li>3. After successful purchase, you will receive your key in chat.</li>
                 </ol>
               </div>
-              <a
-                href={externalLinks.funpay}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => openExternal(externalLinks.funpay)}
+                disabled={authBusy}
                 className="mt-7 inline-flex min-h-12 items-center justify-center gap-2 bg-sky-500 px-8 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-sky-400"
               >
-                Buy Now <ExternalLink className="h-4 w-4" />
-              </a>
+                {authBusy ? 'Authorizing...' : 'Buy Now'} <ExternalLink className="h-4 w-4" />
+              </button>
             </div>
           )}
         </section>

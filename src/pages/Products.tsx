@@ -58,7 +58,7 @@ export default function Products() {
               Our <span className="text-red-500">Scripts</span>
             </h1>
             <p className="mt-4 max-w-2xl text-zinc-400">
-              Browse high-performance Roblox scripts developed for <BrandName className="inline" />. Pick a script, choose a duration, and receive your key after checkout.
+              Browse high-performance Roblox scripts developed for <BrandName className="inline" />. Scripts are listed here for discovery, while one ZXCHUB key unlocks access.
             </p>
           </div>
         </section>
@@ -114,7 +114,7 @@ export default function Products() {
 
               return (
                 <Link
-                  to={`/product/${script.slug || script.id}`}
+                  to={`/script/${script.slug || script.id}`}
                   key={script.id}
                   className="group flex flex-col overflow-hidden border border-white/10 bg-[#09090d] transition duration-300 hover:-translate-y-1 hover:border-red-500/70 hover:shadow-[0_28px_70px_rgba(239,68,68,.16)]"
                 >
@@ -135,8 +135,8 @@ export default function Products() {
 
                   <div className="flex flex-1 flex-col p-5">
                     <h2 className="line-clamp-1 text-xl font-black text-white group-hover:text-red-300">{script.title}</h2>
-                    <p className="mt-2 line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-zinc-400">
-                      {script.description || 'Premium script with instant key delivery after purchase.'}
+                    <p className="mt-2 line-clamp-3 min-h-[4.5rem] whitespace-pre-line text-sm leading-6 text-zinc-400">
+                      {script.description || 'ZXCHUB script with details, code, and comments.'}
                     </p>
 
                     <div className="mt-5 flex items-center gap-5 border-t border-white/10 pt-4 text-xs text-zinc-500">
@@ -149,11 +149,8 @@ export default function Products() {
                       <BrandName className="ml-auto text-xs" />
                     </div>
 
-                    <div className="mt-5 flex items-end justify-between">
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">Access</div>
-                        <div className="text-lg font-black text-white">Requires <BrandName className="inline" /> Key</div>
-                      </div>
+                    <div className="mt-5 flex items-center justify-between">
+                      <div className="text-xs font-black uppercase tracking-[0.18em] text-zinc-600">Script Details</div>
                       <span className="bg-red-600 px-4 py-2 text-sm font-black uppercase tracking-wide text-white transition group-hover:bg-red-500">
                         View Details
                       </span>

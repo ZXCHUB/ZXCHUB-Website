@@ -18,7 +18,7 @@ export default function Checkout() {
   const { variantId } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { user, profile, loading, login } = useAuth();
+  const { user, profile, loading, login, linkDiscord } = useAuth();
   const plan = getZxchubKeyPlan(variantId);
   const isPaidPlan = PAID_WEB_KEY_PLANS.some(item => item.id === plan.id);
 
@@ -125,6 +125,12 @@ export default function Checkout() {
         body: JSON.stringify({ type: 'order_paid', orderId: transactionRef.id })
       }).catch(() => {});
 
+      fetch('/api/discord/give-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.uid })
+      }).catch(() => {});
+
       navigate(`/order/${transactionRef.id}`);
     } catch (purchaseError: any) {
       console.error(purchaseError);
@@ -186,6 +192,9 @@ export default function Checkout() {
       window.paypal.Buttons({
         style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
         createOrder: async () => {
+          if (!profile?.discordId) {
+            await linkDiscord();
+          }
           const response = await fetch('/api/payments/paypal-create-order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -239,12 +248,20 @@ export default function Checkout() {
     return () => {
       cancelled = true;
     };
-  }, [paymentMethod, paypalClientId, user?.uid, plan.id, plan.price]);
+  }, [paymentMethod, paypalClientId, user?.uid, profile?.discordId, plan.id, plan.price]);
 
   const handleStripe = async () => {
     if (!user || !profile) {
       await login();
       return;
+    }
+    if (!profile.discordId) {
+      try {
+        await linkDiscord();
+      } catch (discordError: any) {
+        setError(discordError.message || 'Link Discord before checkout.');
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -279,7 +296,7 @@ export default function Checkout() {
         <div className="mx-auto max-w-lg border border-white/10 bg-[#09090d] p-8 text-center">
           <KeyRound className="mx-auto mb-5 h-10 w-10 text-red-500" />
           <h1 className="text-3xl font-black">Sign In Required</h1>
-          <p className="mt-3 text-zinc-400">Sign in before purchasing so the key can be delivered to My Purchases.</p>
+          <p className="mt-3 text-zinc-400">Sign in and link Discord before purchasing so the key can be delivered to My Purchases.</p>
           <button onClick={login} className="mt-7 bg-red-600 px-6 py-3 text-sm font-black uppercase text-white hover:bg-red-500">Sign In</button>
         </div>
       </div>
@@ -317,6 +334,12 @@ export default function Checkout() {
             <div className="text-sm font-bold text-zinc-500">Total</div>
             <div className="mt-1 text-3xl font-black">${plan.price.toFixed(2)}</div>
           </div>
+
+          {profile && !profile.discordId && (
+            <div className="mb-6 border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+              Link Discord before checkout. The bot can add you to the server, and paid purchases can receive the configured Discord role.
+            </div>
+          )}
 
           <div className="mb-8 grid gap-3">
             {(!paymentSettings || paymentSettings?.stripe?.enabled) && (

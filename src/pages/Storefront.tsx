@@ -100,7 +100,7 @@ export default function Storefront() {
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  to="/products"
+                  to="/scripts"
                   className="group inline-flex min-h-12 items-center justify-center gap-2 bg-red-600 px-6 py-3 text-sm font-black uppercase tracking-wide text-white shadow-[0_18px_55px_rgba(239,68,68,.25)] transition hover:bg-red-500"
                 >
                   Browse Scripts <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
@@ -140,7 +140,7 @@ export default function Storefront() {
                 Featured Scripts
               </h2>
             </div>
-            <Link to="/products" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-zinc-300 hover:text-white">
+            <Link to="/scripts" className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-zinc-300 hover:text-white">
               Open Library <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -152,12 +152,10 @@ export default function Storefront() {
           ) : (
             <div className="grid gap-5 md:grid-cols-3">
               {featuredScripts.map(script => {
-                const firstVariant = script.variants?.[0];
-                const stock = availableKeys[script.id] || 0;
                 return (
                   <Link
                     key={script.id}
-                    to={`/product/${script.slug || script.id}`}
+                    to={`/script/${script.slug || script.id}`}
                     className="group overflow-hidden border border-white/10 bg-[#0a0a0e] transition hover:-translate-y-1 hover:border-red-500/60 hover:shadow-[0_24px_70px_rgba(239,68,68,.14)]"
                   >
                     <div className="relative aspect-[16/9] overflow-hidden bg-zinc-900">
@@ -178,8 +176,8 @@ export default function Storefront() {
                       <h3 className="line-clamp-1 text-xl font-black text-white group-hover:text-red-300">{script.title}</h3>
                       <p className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-zinc-400">{script.description || 'View script details and key plans.'}</p>
                       <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
-                        <span className="font-mono text-zinc-400">{stock > 0 ? `${stock} keys` : 'Stock soon'}</span>
-                        <span className="font-black text-white">{firstVariant ? `$${Number(firstVariant.price || 0).toFixed(2)}` : 'Details'}</span>
+                        <span className="font-mono text-zinc-400">Included in ZXCHUB</span>
+                        <span className="font-black text-white">Details</span>
                       </div>
                     </div>
                   </Link>
@@ -240,7 +238,7 @@ export default function Storefront() {
             <BrandName />
           </Link>
           <div className="flex gap-5">
-            <Link to="/products" className="hover:text-white">Scripts</Link>
+            <Link to="/scripts" className="hover:text-white">Scripts</Link>
             <Link to="/get-key" className="hover:text-white">Get Key</Link>
             <a href="https://discord.gg/zxchub" target="_blank" rel="noreferrer" className="hover:text-white">Discord</a>
           </div>

@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter as Router, Link, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './AuthContext';
 import { db } from './firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -74,10 +74,12 @@ export default function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Storefront />} />
-            <Route path="/products" element={<Products />} />
+            <Route path="/scripts" element={<Products />} />
+            <Route path="/products" element={<NavigateTo to="/scripts" />} />
             <Route path="/get-key" element={<GetKey />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/product/:slug" element={<ProductPage />} />
+            <Route path="/script/:slug" element={<ProductPage />} />
+            <Route path="/product/:slug" element={<LegacyScriptRedirect />} />
             <Route path="/checkout/key/:variantId" element={<Checkout />} />
             <Route path="/order/:transactionId" element={<OrderComplete />} />
             <Route path="/refund-policy" element={<RefundPolicy />} />
@@ -101,4 +103,13 @@ export default function App() {
       </Router>
     </AuthProvider>
   );
+}
+
+function NavigateTo({ to }: { to: string }) {
+  return <Navigate to={to} replace />;
+}
+
+function LegacyScriptRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/script/${slug || ''}`} replace />;
 }
