@@ -14,11 +14,13 @@ interface NavItemProps {
   to?: string;
   children?: { label: string; to: string; icon: React.ElementType }[];
   isActive?: boolean;
+  accent?: 'admin' | 'moderator';
 }
 
-const NavItem = ({ icon: Icon, label, to, children, isActive }: NavItemProps) => {
+const NavItem = ({ icon: Icon, label, to, children, isActive, accent = 'admin' }: NavItemProps) => {
   const [isOpen, setIsOpen] = useState(isActive);
   const location = useLocation();
+  const activeClass = accent === 'moderator' ? 'bg-orange-500/10 text-orange-300' : 'bg-indigo-500/10 text-indigo-400';
 
   if (children) {
     return (
@@ -26,7 +28,7 @@ const NavItem = ({ icon: Icon, label, to, children, isActive }: NavItemProps) =>
         <button
           onClick={() => setIsOpen(!isOpen)}
           className={`w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-            isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            isActive ? activeClass : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
           }`}
         >
           <div className="flex items-center gap-3">
@@ -45,7 +47,7 @@ const NavItem = ({ icon: Icon, label, to, children, isActive }: NavItemProps) =>
                   key={child.to}
                   to={child.to}
                   className={`flex items-center gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    isChildActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    isChildActive ? activeClass : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                   }`}
                 >
                   <child.icon className="w-4 h-4" />
@@ -63,7 +65,7 @@ const NavItem = ({ icon: Icon, label, to, children, isActive }: NavItemProps) =>
     <Link
       to={to!}
       className={`flex items-center gap-3 px-4 py-2.5 mb-1 text-sm font-medium rounded-lg transition-colors ${
-        isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+        isActive ? activeClass : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
       }`}
     >
       <Icon className="w-5 h-5" />
@@ -86,6 +88,7 @@ export default function AdminLayout() {
 
   const isPathPrefixActive = (prefix: string) => location.pathname.startsWith(prefix);
   const isModeratorRole = profile.role === 'moderator';
+  const panelAccent = isModeratorRole ? 'moderator' : 'admin';
   const moderatorAllowedPaths = [
     '/admin',
     '/admin/scripts',
@@ -107,16 +110,22 @@ export default function AdminLayout() {
             <img src="/logo.png" alt="ZXCHUB" className="w-8 h-8 object-contain" />
             <BrandName className="text-xl" />
           </Link>
+          <div className={`mt-3 inline-flex px-2.5 py-1 text-xs font-black uppercase tracking-wide ${
+            isModeratorRole ? 'bg-orange-500/10 text-orange-300' : 'bg-red-500/10 text-red-300'
+          }`}>
+            {isModeratorRole ? 'Moderator Panel' : 'Admin Panel'}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-6">
           <div>
-            <NavItem icon={Home} label="Dashboard" to="/admin" isActive={location.pathname === '/admin'} />
+            <NavItem icon={Home} label="Dashboard" to="/admin" isActive={location.pathname === '/admin'} accent={panelAccent} />
 
             <NavItem 
               icon={Code2} 
               label="Scripts" 
               isActive={isPathPrefixActive('/admin/scripts')}
+              accent={panelAccent}
               children={[
                 { label: 'All Scripts', to: '/admin/scripts', icon: Code2 },
                 ...(!isModeratorRole ? [{ label: 'Key Inventory', to: '/admin/scripts/keys', icon: KeyRound }] : []),
@@ -127,6 +136,7 @@ export default function AdminLayout() {
               icon={ListOrdered} 
               label="Orders" 
               isActive={isPathPrefixActive('/admin/orders')}
+              accent={panelAccent}
               children={[
                 { label: 'Invoices', to: '/admin/orders/invoices', icon: Receipt },
                 { label: 'Customers', to: '/admin/orders/customers', icon: Users },
@@ -141,6 +151,7 @@ export default function AdminLayout() {
                 icon={Settings} 
                 label="Settings" 
                 isActive={isPathPrefixActive('/admin/settings')}
+                accent={panelAccent}
                 children={[
                   { label: 'Discord', to: '/admin/settings/discord', icon: Settings },
                   { label: 'Payment Methods', to: '/admin/settings/payments', icon: CreditCard },
@@ -149,7 +160,7 @@ export default function AdminLayout() {
                   { label: 'Themes', to: '/admin/settings/themes', icon: Palette },
                 ]}
               />
-              <NavItem icon={User} label="Account" to="/profile" isActive={false} />
+              <NavItem icon={User} label="Account" to="/profile" isActive={false} accent={panelAccent} />
             </div>
           )}
         </div>

@@ -129,9 +129,16 @@ export default function Navbar() {
             <div className="flex items-center gap-4">
               {user && profile ? (
                 <>
-                  {profile.role === 'admin' && (
-                    <Link to="/admin" className="hidden bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20 sm:flex">
-                      Admin Panel
+                  {(profile.role === 'admin' || profile.role === 'moderator') && (
+                    <Link
+                      to="/admin"
+                      className={`hidden px-3 py-1.5 text-sm font-medium transition-colors sm:flex ${
+                        profile.role === 'moderator'
+                          ? 'bg-orange-500/10 text-orange-300 hover:bg-orange-500/20'
+                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                      }`}
+                    >
+                      {profile.role === 'moderator' ? 'Moderator Panel' : 'Admin Panel'}
                     </Link>
                   )}
                   <Link to="/profile" className="block" title="Profile">

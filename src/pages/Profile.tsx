@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
-import { collection, doc, getDocs, query, updateDoc, where, writeBatch } from 'firebase/firestore';
-import { Copy, Download, FileText, KeyRound, LogOut, MessageSquare, Save, Send, Settings, Ticket } from 'lucide-react';
+import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { Copy, Download, FileText, KeyRound, LogOut, MessageSquare, Paperclip, Save, Send, Settings, Ticket } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import Navbar from '../components/Navbar';
@@ -225,21 +225,92 @@ function InvoicesTab({ user }: { user: any }) {
   );
 }
 
+function readTicketAttachment(file: File): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (file.size > 700 * 1024) {
+      reject(new Error('Attachment must be under 700KB.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      dataUrl: String(reader.result || '')
+    });
+    reader.onerror = () => reject(new Error('Failed to read attachment.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function TicketAttachments({ attachments }: { attachments?: any[] }) {
+  if (!attachments?.length) return null;
+  return (
+    <div className="mt-3 space-y-2">
+      {attachments.map((file, index) => (
+        <a
+          key={`${file.name || 'attachment'}-${index}`}
+          href={file.dataUrl || file.url}
+          download={file.name}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2 border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 hover:bg-white/5"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+          <span className="truncate">{file.name || 'Attachment'}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function TicketsTab({ user, profile, showToast }: { user: any; profile: any; showToast: any }) {
   const [tickets, setTickets] = useState<any[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [reply, setReply] = useState('');
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchTickets = async () => {
-    const snap = await getDocs(query(collection(db, 'tickets'), where('userId', '==', user.uid)));
-    setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)));
-    setLoading(false);
-  };
+  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+  const selectedTicket = tickets.find(ticket => ticket.id === selectedTicketId) || null;
 
   useEffect(() => {
-    fetchTickets();
+    const q = query(collection(db, 'tickets'), where('userId', '==', user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const data = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+      setTickets(data);
+      setSelectedTicketId(current => current || data[0]?.id || null);
+      setLoading(false);
+    }, error => {
+      console.error(error);
+      showToast('Failed to load tickets.', 'error');
+      setLoading(false);
+    });
+    return () => unsub();
   }, [user.uid]);
+
+  useEffect(() => {
+    if (!selectedTicketId) {
+      setMessages([]);
+      return;
+    }
+    const q = query(collection(db, `tickets/${selectedTicketId}/messages`), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, snap => {
+      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    }, error => {
+      console.error(error);
+      showToast('Failed to load chat messages.', 'error');
+    });
+    return () => unsub();
+  }, [selectedTicketId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, selectedTicketId]);
 
   const createTicket = async () => {
     const cleanSubject = subject.trim();
@@ -266,6 +337,7 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
       createdAt: Date.now()
     });
     await batch.commit();
+    setSelectedTicketId(ticketRef.id);
     fetch('/api/discord/notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -274,38 +346,161 @@ function TicketsTab({ user, profile, showToast }: { user: any; profile: any; sho
     setSubject('');
     setMessage('');
     showToast('Ticket created.');
-    await fetchTickets();
+  };
+
+  const sendReply = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedTicket || (!reply.trim() && attachments.length === 0)) return;
+
+    const cleanReply = reply.trim();
+    await addDoc(collection(db, `tickets/${selectedTicket.id}/messages`), {
+      text: cleanReply,
+      attachments,
+      senderId: user.uid,
+      senderName: profile.displayName || profile.email,
+      ticketUserId: user.uid,
+      isAdmin: false,
+      createdAt: Date.now()
+    });
+    await updateDoc(doc(db, 'tickets', selectedTicket.id), {
+      updatedAt: Date.now(),
+      lastMessage: cleanReply || `${attachments.length} attachment(s)`,
+      status: 'active'
+    });
+    setReply('');
+    setAttachments([]);
   };
 
   return (
-    <div>
-      <h1 className="mb-7 text-3xl font-black">Support Tickets</h1>
-      <div className="mb-8 border border-white/10 bg-black p-5">
-        <div className="mb-4 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-red-400"><MessageSquare className="h-4 w-4" /> New Ticket</div>
-        <input value={subject} onChange={event => setSubject(event.target.value)} placeholder="Subject" className="mb-3 w-full border border-white/10 bg-[#08080b] px-4 py-3 text-sm text-white outline-none focus:border-red-500" />
-        <textarea value={message} onChange={event => setMessage(event.target.value)} placeholder="Describe your issue..." className="min-h-32 w-full resize-y border border-white/10 bg-[#08080b] p-4 text-sm text-white outline-none focus:border-red-500" />
-        <button onClick={createTicket} className="mt-4 inline-flex items-center gap-2 bg-red-600 px-5 py-3 text-sm font-black uppercase text-white hover:bg-red-500">
-          <Send className="h-4 w-4" /> Create Ticket
-        </button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-black">Support Tickets</h1>
+        <p className="mt-1 text-sm text-zinc-500">Chat with ZXCHUB support. Replies from staff show their support nickname.</p>
       </div>
 
-      {loading ? <div className="text-zinc-500">Loading tickets...</div> : (
-        <div className="space-y-3">
-          {tickets.map(ticket => (
-            <div key={ticket.id} className="border border-white/10 bg-black p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-black">{ticket.subject}</div>
-                  <div className="mt-1 text-xs text-zinc-600">{new Date(ticket.updatedAt || ticket.createdAt || Date.now()).toLocaleString()}</div>
-                </div>
-                <span className={`px-3 py-1 text-xs font-black uppercase ${ticket.status === 'closed' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-500/10 text-emerald-300'}`}>{ticket.status || 'active'}</span>
-              </div>
-              <div className="mt-3 text-sm text-zinc-400">{ticket.lastMessage}</div>
+      <div className="grid min-h-[620px] overflow-hidden border border-white/10 bg-black lg:grid-cols-[20rem_1fr]">
+        <aside className="border-b border-white/10 bg-[#07070a] lg:border-b-0 lg:border-r">
+          <div className="border-b border-white/10 p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-wide text-red-400">
+              <MessageSquare className="h-4 w-4" /> New Ticket
             </div>
-          ))}
-          {tickets.length === 0 && <div className="py-8 text-center text-sm text-zinc-600">No tickets yet.</div>}
+            <input value={subject} onChange={event => setSubject(event.target.value)} placeholder="Subject" className="mb-2 w-full border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none focus:border-red-500" />
+            <textarea value={message} onChange={event => setMessage(event.target.value)} placeholder="Describe your issue..." className="min-h-24 w-full resize-y border border-white/10 bg-black p-3 text-sm text-white outline-none focus:border-red-500" />
+            <button onClick={createTicket} className="mt-3 inline-flex w-full items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-xs font-black uppercase text-white hover:bg-red-500">
+              <Send className="h-4 w-4" /> Create Ticket
+            </button>
+          </div>
+
+          <div className="max-h-[26rem] overflow-y-auto lg:max-h-[31rem]">
+            {loading ? (
+              <div className="p-6 text-sm text-zinc-500">Loading tickets...</div>
+            ) : tickets.length === 0 ? (
+              <div className="p-6 text-center text-sm text-zinc-600">No tickets yet.</div>
+            ) : tickets.map(ticket => (
+              <button
+                key={ticket.id}
+                onClick={() => setSelectedTicketId(ticket.id)}
+                className={`block w-full border-b border-white/10 p-4 text-left transition ${selectedTicketId === ticket.id ? 'bg-red-600/10' : 'hover:bg-white/5'}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-black text-white">{ticket.subject || 'Support Request'}</div>
+                    <div className="mt-1 truncate text-xs text-zinc-500">{ticket.lastMessage || 'No messages yet'}</div>
+                  </div>
+                  <span className={`shrink-0 px-2 py-1 text-[10px] font-black uppercase ${ticket.status === 'closed' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-500/10 text-emerald-300'}`}>{ticket.status || 'active'}</span>
+                </div>
+                <div className="mt-2 text-[11px] text-zinc-600">{new Date(ticket.updatedAt || ticket.createdAt || Date.now()).toLocaleString()}</div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="flex min-h-[620px] flex-col bg-[#09090d]">
+          {selectedTicket ? (
+            <>
+              <header className="border-b border-white/10 bg-[#07070a] p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-black">{selectedTicket.subject || 'Support Request'}</h2>
+                    <p className="mt-1 text-xs text-zinc-500">Ticket #{selectedTicket.id.slice(0, 8)}</p>
+                  </div>
+                  <span className={`w-fit px-3 py-1 text-xs font-black uppercase ${selectedTicket.status === 'closed' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-500/10 text-emerald-300'}`}>{selectedTicket.status || 'active'}</span>
+                </div>
+              </header>
+
+              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                {messages.map(msg => {
+                  const fromSupport = Boolean(msg.isAdmin);
+                  const senderName = msg.senderName || (fromSupport ? 'ZXCHUB Support' : profile.displayName || profile.email);
+                  return (
+                    <div key={msg.id} className={`flex ${fromSupport ? 'justify-start' : 'justify-end'}`}>
+                      <div className={`max-w-[82%] border p-3 sm:max-w-[70%] ${fromSupport ? 'border-red-500/20 bg-red-500/10 text-zinc-100' : 'border-white/10 bg-[#15151b] text-white'}`}>
+                        <div className="mb-1 flex items-center justify-between gap-4 text-xs text-zinc-400">
+                          <span className={fromSupport ? 'font-black text-red-300' : 'font-bold text-zinc-300'}>
+                            {fromSupport ? `Support: ${senderName}` : senderName}
+                          </span>
+                          <span>{new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        {msg.text && <div className="whitespace-pre-wrap break-words text-sm leading-6">{msg.text}</div>}
+                        <TicketAttachments attachments={msg.attachments} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {messages.length === 0 && (
+                  <div className="flex h-full items-center justify-center text-sm text-zinc-600">No messages yet.</div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <form onSubmit={sendReply} className="border-t border-white/10 bg-[#07070a] p-4">
+                {attachments.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {attachments.map((file, index) => (
+                      <span key={`${file.name}-${index}`} className="border border-white/10 bg-black px-3 py-1 text-xs text-zinc-300">{file.name}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={reply}
+                    onChange={event => setReply(event.target.value)}
+                    placeholder={selectedTicket.status === 'closed' ? 'Reply to reopen this ticket...' : 'Type your message...'}
+                    className="min-w-0 flex-1 border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none focus:border-red-500"
+                  />
+                  <label className="flex cursor-pointer items-center justify-center border border-white/10 bg-black px-3 text-zinc-300 hover:bg-white/5">
+                    <Paperclip className="h-4 w-4" />
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={async event => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const attachment = await readTicketAttachment(file);
+                          setAttachments(current => [...current, attachment].slice(0, 3));
+                        } catch (error: any) {
+                          showToast(error.message || 'Failed to attach file.', 'error');
+                        }
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <button type="submit" disabled={!reply.trim() && attachments.length === 0} className="inline-flex items-center justify-center bg-red-600 px-4 text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-zinc-600">
+              <MessageSquare className="mb-4 h-12 w-12" />
+              <div className="text-lg font-black text-zinc-400">Select or create a ticket</div>
+              <div className="mt-1 text-sm">Your conversation with support will appear here.</div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
