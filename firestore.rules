@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == 'zxchubadmin@gmail.com')
+      );
+    }
+
+    function isSupport() {
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
+      );
+    }
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == userId && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'balance', 'affiliateEarnings'])
+      ));
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /viewers/{sessionId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /keys/{keyId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid) || resource.data.isSold == false;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() && 
+        resource.data.isSold == false && 
+        request.resource.data.isSold == true && 
+        request.resource.data.ownerId == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    match /promocodes/{promoId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses', 'usedBy'])
+      );
+    }
+
+    match /transactions/{txId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /tickets/{ticketId} {
+      allow read: if isAdmin() || isSupport() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || isSupport() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || isSupport();
+      
+      match /messages/{messageId} {
+         allow read: if isAdmin() || isSupport() || (isAuthenticated() && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid);
+         allow create: if isAdmin() || isSupport() || (isAuthenticated() && (
+            (exists(/databases/$(database)/documents/tickets/$(ticketId)) && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid) ||
+            request.resource.data.ticketUserId == request.auth.uid
+         ));
+         allow update, delete: if isAdmin() || isSupport();
+      }
+    }
+
+    match /affiliate_history/{historyId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.affiliateId == request.auth.uid);
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    match /pageviews/{docId} {
+      allow read: if isAdmin();
+      allow create: if true;
+    }
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
