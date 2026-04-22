@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { ArrowRight, BadgeCheck, Code2, KeyRound, Radio, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
@@ -13,22 +13,23 @@ export default function Storefront() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     productsSold: 0,
-    happyCustomers: 0,
-    averageRating: 0
+    availableKeys: 0,
+    scriptsOnline: 0
   });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [productsSnap, reviewsSnap, statsResponse, themeSnap] = await Promise.all([
+        const [productsSnap, statsResponse, themeSnap] = await Promise.all([
           getDocs(collection(db, 'products')),
-          getDocs(query(collection(db, 'reviews'), orderBy('createdAt', 'desc'))),
           fetch('/api/store-stats').catch(() => null),
           getDoc(doc(db, 'settings', 'theme')).catch(() => null)
         ]);
 
         const prods = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        const sorted = prods.sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
+        const sorted = prods
+          .filter(product => product.slug !== 'zxchub-key' && (product.visibility || 'public') === 'public')
+          .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
         setProducts(sorted);
 
         const keysSnap = await getDocs(query(collection(db, 'keys'), where('isSold', '==', false)));
@@ -40,15 +41,11 @@ export default function Storefront() {
         setAvailableKeys(counts);
 
         const storeStats = statsResponse?.ok ? await statsResponse.json() : null;
-        const reviews = reviewsSnap.docs.map(d => d.data() as any);
-        const uniqueUsers = new Set(reviews.map(review => review.userId));
-        const totalRating = reviews.reduce((sum, review) => sum + (review.rating || 5), 0);
-        const avgRating = reviews.length > 0 ? Math.round(totalRating / reviews.length) : 5;
 
         setStats({
           productsSold: Number(storeStats?.productsSold || 0),
-          happyCustomers: uniqueUsers.size,
-          averageRating: avgRating
+          availableKeys: keysSnap.docs.length,
+          scriptsOnline: sorted.length
         });
 
         if (themeSnap?.exists()) {
@@ -72,15 +69,15 @@ export default function Storefront() {
       <SEO
         title="ZXCHUB | Roblox Scripts and Key Access"
         description="Premium Roblox scripts, fast updates, and secure ZXCHUB key access."
-        image="/background.png"
+        image="/logo.png"
       />
       <Navbar />
 
       <main>
         <section className="relative min-h-[calc(100svh-4rem)] overflow-hidden border-b border-white/10">
           <div className="absolute inset-0">
-            <img src="/background.png" alt="" className="h-full w-full object-cover opacity-35" />
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,#050507_0%,rgba(5,5,7,.88)_38%,rgba(5,5,7,.42)_100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_22%,rgba(239,68,68,.22),transparent_28rem),radial-gradient(circle_at_28%_28%,rgba(255,255,255,.08),transparent_24rem),linear-gradient(90deg,#050507_0%,rgba(5,5,7,.88)_38%,rgba(5,5,7,.42)_100%)]" />
+            <img src="/logo.png" alt="" className="absolute right-[8%] top-1/2 h-80 w-80 -translate-y-1/2 object-contain opacity-10 blur-[1px] sm:h-[32rem] sm:w-[32rem]" />
             <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,5,7,.1)_0%,#050507_98%)]" />
             <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(255,255,255,.04)_0_1px,transparent_1px_78px)]" />
           </div>
@@ -196,8 +193,8 @@ export default function Storefront() {
           <div className="mx-auto grid max-w-7xl gap-px bg-white/10 md:grid-cols-3">
             {[
               [`${stats.productsSold}`, 'Keys delivered'],
-              [`${stats.happyCustomers}`, 'Customers with reviews'],
-              [`${stats.averageRating}/5`, 'Average rating']
+              [`${stats.availableKeys}`, 'Keys available'],
+              [`${stats.scriptsOnline}`, 'Scripts online']
             ].map(([value, label]) => (
               <div key={label} className="bg-[#08080b] px-4 py-12 text-center">
                 <div className="text-4xl font-black text-white">{value}</div>

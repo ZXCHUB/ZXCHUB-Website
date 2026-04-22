@@ -36,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: metadata?.type === 'topup' ? 'Balance Top Up' : metadata?.productTitle || 'Order Checkout'
+              name: metadata?.productTitle || metadata?.planName || 'ZXCHUB Key'
             },
             unit_amount: Math.max(50, Math.round(Number(amount || 0) * 100))
           },

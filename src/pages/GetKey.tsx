@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CreditCard, ExternalLink, Gamepad2, KeyRound, Play, WalletCards } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import SEO from '../components/SEO';
-import { ZXCHUB_KEY_PLANS } from '../keyPlans';
+import { PAID_WEB_KEY_PLANS, ZXCHUB_KEY_PLANS } from '../keyPlans';
 import BrandName from '../components/BrandName';
 
 type Method = 'free' | 'robux' | 'paypal' | 'card' | 'funpay';
@@ -40,7 +40,7 @@ export default function GetKey() {
     setParams({ method });
   };
 
-  const selectedPlan = ZXCHUB_KEY_PLANS.find(plan => plan.id === selectedPlanId) || ZXCHUB_KEY_PLANS[1];
+  const selectedPlan = PAID_WEB_KEY_PLANS.find(plan => plan.id === selectedPlanId) || PAID_WEB_KEY_PLANS[0];
   const isPaidWebMethod = activeMethod === 'paypal' || activeMethod === 'card';
   const accent = activeMethod === 'paypal' || activeMethod === 'funpay' ? 'text-sky-400' : 'text-red-400';
 
@@ -132,7 +132,7 @@ export default function GetKey() {
               </h2>
 
               <div className="my-7 grid gap-3 sm:grid-cols-4">
-                {ZXCHUB_KEY_PLANS.map(plan => {
+                {PAID_WEB_KEY_PLANS.map(plan => {
                   const active = selectedPlan.id === plan.id;
                   return (
                     <button

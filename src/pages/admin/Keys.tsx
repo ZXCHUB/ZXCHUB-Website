@@ -1,237 +1,168 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { KeyRound, Trash2 } from 'lucide-react';
 import { db } from '../../firebase';
-import { Trash2 } from 'lucide-react';
+import { PAID_WEB_KEY_PLANS, ZXCHUB_KEY_PRODUCT_ID } from '../../keyPlans';
 
 export default function AdminKeys() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [selectedVariantId, setSelectedVariantId] = useState('');
+  const [selectedPlanId, setSelectedPlanId] = useState(PAID_WEB_KEY_PLANS[0].id);
   const [keysInput, setKeysInput] = useState('');
-  const [existingKeys, setExistingKeys] = useState<any[]>([]);
+  const [keys, setKeys] = useState<any[]>([]);
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
-  const [toast, setToast] = useState<{message: string, type: 'success'|'error'} | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const selectedPlan = PAID_WEB_KEY_PLANS.find(plan => plan.id === selectedPlanId) || PAID_WEB_KEY_PLANS[0];
+  const visibleKeys = useMemo(() => keys.filter(key => key.variantId === selectedPlan.id && !key.deletedByAdmin), [keys, selectedPlan.id]);
+  const availableCount = visibleKeys.filter(key => !key.isSold).length;
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
+  const fetchKeys = async () => {
+    const snap = await getDocs(query(collection(db, 'keys'), where('productId', '==', ZXCHUB_KEY_PRODUCT_ID)));
+    setKeys(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
   useEffect(() => {
-    const fetchProducts = async () => {
-      const snap = await getDocs(collection(db, 'products'));
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    fetchProducts();
+    fetchKeys();
   }, []);
 
-  useEffect(() => {
-    const fetchKeys = async () => {
-      if (!selectedProductId || !selectedVariantId) {
-        setExistingKeys([]);
-        return;
-      }
-      const q = query(
-        collection(db, 'keys'), 
-        where('productId', '==', selectedProductId),
-        where('variantId', '==', selectedVariantId)
-      );
-      const snap = await getDocs(q);
-      const now = Date.now();
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      const keys = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const validKeys = [];
-      
-      for (const k of keys) {
-        if (k.deletedByAdmin) continue;
-        if (k.isSold && k.purchasedAt) {
-          const purchaseTime = new Date(k.purchasedAt).getTime();
-          if (now - purchaseTime > SEVEN_DAYS) {
-            try {
-              await updateDoc(doc(db, 'keys', k.id), { deletedByAdmin: true });
-            } catch (e) {
-              console.error("Failed to hide old key", e);
-            }
-            continue;
-          }
-        }
-        validKeys.push(k);
-      }
-      setExistingKeys(validKeys);
-    };
-    fetchKeys();
-  }, [selectedProductId, selectedVariantId]);
-
   const handleAddKeys = async () => {
-    if (!selectedProductId || !selectedVariantId || !keysInput.trim()) return showToast("Select product, variant and enter keys.", "error");
+    const cleanKeys = keysInput.split('\n').map(key => key.trim()).filter(Boolean);
+    if (cleanKeys.length === 0) return showToast('Enter at least one key.', 'error');
 
-    const product = products.find(p => p.id === selectedProductId);
-    const variant = product?.variants?.find((v: any) => v.id === selectedVariantId);
-    if (!product || !variant) return;
-
-    const newKeys = keysInput.split('\n').map(k => k.trim()).filter(k => k);
-    
     try {
-      for (const k of newKeys) {
-        await addDoc(collection(db, 'keys'), {
-          productId: product.id,
-          variantId: variant.id,
-          productName: product.title,
-          variantName: variant.name,
-          keyString: k,
-          isSold: false,
-          ownerId: null,
-          purchasedAt: null
-        });
-      }
+      await Promise.all(cleanKeys.map(keyString => addDoc(collection(db, 'keys'), {
+        productId: ZXCHUB_KEY_PRODUCT_ID,
+        variantId: selectedPlan.id,
+        productName: 'ZXCHUB Key',
+        variantName: selectedPlan.name,
+        keyString,
+        isSold: false,
+        ownerId: null,
+        ownerName: '',
+        ownerPhoto: '',
+        purchasedAt: null,
+        price: selectedPlan.price,
+        createdAt: Date.now()
+      })));
       setKeysInput('');
-      showToast(`Successfully added ${newKeys.length} keys!`);
-      
-      // Refresh keys list
-      const q = query(collection(db, 'keys'), where('productId', '==', selectedProductId), where('variantId', '==', selectedVariantId));
-      const snap = await getDocs(q);
-      setExistingKeys(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((k: any) => !k.deletedByAdmin));
-    } catch (e) {
-      console.error(e);
-      showToast("Failed to add keys.", "error");
+      await fetchKeys();
+      showToast(`Added ${cleanKeys.length} ${selectedPlan.name} keys.`);
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to add keys.', 'error');
     }
   };
 
   const confirmDeleteKey = async () => {
     if (!keyToDelete) return;
+    const target = keys.find(key => key.id === keyToDelete);
     try {
-      const keyDoc = existingKeys.find(k => k.id === keyToDelete);
-      if (keyDoc?.isSold) {
+      if (target?.isSold) {
         await updateDoc(doc(db, 'keys', keyToDelete), { deletedByAdmin: true });
       } else {
         await deleteDoc(doc(db, 'keys', keyToDelete));
       }
-      setExistingKeys(existingKeys.filter(k => k.id !== keyToDelete));
-      showToast("Key deleted from inventory.");
-    } catch (e) {
-      console.error(e);
-      showToast("Failed to delete key.", "error");
+      setKeys(current => current.filter(key => key.id !== keyToDelete));
+      showToast('Key removed from inventory.');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to delete key.', 'error');
+    } finally {
+      setKeyToDelete(null);
     }
-    setKeyToDelete(null);
   };
 
-  const selectedProduct = products.find(p => p.id === selectedProductId);
-
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="mx-auto max-w-6xl text-white">
       {toast && (
-        <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg font-medium shadow-lg z-50 ${
-          toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
-        }`}>
+        <div className={`fixed bottom-4 right-4 z-50 px-6 py-3 font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'}`}>
           {toast.message}
         </div>
       )}
 
-      <h2 className="text-2xl font-bold text-white mb-6">Manage Keys (Inventory)</h2>
-
-      {/* Delete Key Modal */}
       {keyToDelete && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#1e293b] border border-slate-800 p-6 rounded-xl max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Key?</h3>
-            <p className="text-slate-400 mb-6">Are you sure you want to delete this key? This action cannot be undone.</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setKeyToDelete(null)} className="px-4 py-2 rounded-lg font-medium text-slate-300 hover:bg-slate-800 transition-colors">Cancel</button>
-              <button onClick={confirmDeleteKey} className="px-4 py-2 rounded-lg font-medium bg-red-600 hover:bg-red-700 text-white transition-colors">Yes, Delete</button>
+          <div className="w-full max-w-md border border-white/10 bg-[#101016] p-6">
+            <h3 className="text-xl font-black">Delete Key?</h3>
+            <p className="mt-2 text-sm text-zinc-400">Sold keys are hidden from admin inventory, unsold keys are permanently deleted.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setKeyToDelete(null)} className="px-4 py-2 text-sm font-bold text-zinc-300 hover:bg-white/5">Cancel</button>
+              <button onClick={confirmDeleteKey} className="bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-500">Delete</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-slate-400 mb-1">Select Product</label>
-          <select 
-            value={selectedProductId} 
-            onChange={e => {
-              setSelectedProductId(e.target.value);
-              setSelectedVariantId('');
-            }}
-            className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-          >
-            <option value="">-- Choose Product --</option>
-            {products.map(p => (
-              <option key={p.id} value={p.id}>{p.title}</option>
-            ))}
-          </select>
+      <div className="mb-8">
+        <div className="mb-3 inline-flex items-center gap-2 border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-300">
+          <KeyRound className="h-3.5 w-3.5" /> Key Inventory
         </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-slate-400 mb-1">Select Variant</label>
-          <select 
-            value={selectedVariantId} 
-            onChange={e => setSelectedVariantId(e.target.value)}
-            disabled={!selectedProductId}
-            className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-          >
-            <option value="">-- Choose Variant --</option>
-            {selectedProduct?.variants?.map((v: any) => (
-              <option key={v.id} value={v.id}>{v.name} (${v.price})</option>
-            ))}
-          </select>
-        </div>
+        <h1 className="text-3xl font-black">ZXCHUB Keys</h1>
+        <p className="mt-1 text-sm text-zinc-400">Add unique keys for each plan. Once sold, a key is marked as sold and cannot be delivered to another customer.</p>
       </div>
 
-      {selectedProductId && selectedVariantId && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Add Keys */}
-          <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4">Add New Keys</h3>
-            <p className="text-sm text-slate-400 mb-2">Enter one key per line.</p>
-            <textarea 
-              value={keysInput}
-              onChange={e => setKeysInput(e.target.value)}
-              className="w-full bg-[#0f172a] border border-slate-800 rounded-lg px-3 py-2 text-white h-48 font-mono text-sm mb-4 focus:outline-none focus:border-indigo-500"
-              placeholder="XXXX-XXXX-XXXX-XXXX&#10;YYYY-YYYY-YYYY-YYYY"
-            />
-            <button 
-              onClick={handleAddKeys}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+      <div className="mb-8 grid gap-px overflow-hidden border border-white/10 bg-white/10 md:grid-cols-3">
+        {PAID_WEB_KEY_PLANS.map(plan => {
+          const planKeys = keys.filter(key => key.variantId === plan.id && !key.deletedByAdmin);
+          const free = planKeys.filter(key => !key.isSold).length;
+          return (
+            <button
+              key={plan.id}
+              onClick={() => setSelectedPlanId(plan.id)}
+              className={`bg-[#08080b] p-5 text-left transition ${selectedPlanId === plan.id ? 'shadow-[inset_0_0_0_1px_rgba(239,68,68,.9)]' : 'hover:bg-[#101016]'}`}
             >
-              Add Keys
+              <div className="text-lg font-black">{plan.name}</div>
+              <div className="mt-2 text-sm text-zinc-500">${plan.price.toFixed(2)}</div>
+              <div className="mt-4 text-2xl font-black text-red-400">{free}</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-zinc-600">available / {planKeys.length} total</div>
             </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
+        <section className="border border-white/10 bg-[#08080b] p-6">
+          <h2 className="text-xl font-black">Add {selectedPlan.name} Keys</h2>
+          <p className="mt-2 text-sm text-zinc-500">Paste one key per line.</p>
+          <textarea
+            value={keysInput}
+            onChange={event => setKeysInput(event.target.value)}
+            className="mt-5 min-h-72 w-full resize-y border border-white/10 bg-black p-4 font-mono text-sm text-white outline-none focus:border-red-500"
+            placeholder="ZXCHUB-XXXX-XXXX-XXXX&#10;ZXCHUB-YYYY-YYYY-YYYY"
+          />
+          <button onClick={handleAddKeys} className="mt-5 w-full bg-red-600 px-6 py-3 text-sm font-black uppercase tracking-wide text-white hover:bg-red-500">
+            Add Keys
+          </button>
+        </section>
+
+        <section className="border border-white/10 bg-[#08080b] p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-xl font-black">{selectedPlan.name} Inventory</h2>
+            <span className="text-sm font-bold text-zinc-500">{availableCount} available / {visibleKeys.length} total</span>
           </div>
 
-          {/* Existing Keys */}
-          <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-6 flex flex-col">
-            <h3 className="text-lg font-bold text-white mb-4 flex justify-between items-center">
-              Inventory
-              <span className="text-sm font-normal text-slate-400">
-                {existingKeys.filter(k => !k.isSold).length} Available / {existingKeys.length} Total
-              </span>
-            </h3>
-            
-            <div className="flex-1 overflow-y-auto max-h-[300px] space-y-2 pr-2">
-              {existingKeys.length === 0 ? (
-                <div className="text-slate-500 text-sm italic">No keys found for this variant.</div>
-              ) : (
-                existingKeys.map(k => (
-                  <div key={k.id} className="flex items-center justify-between bg-[#0f172a] border border-slate-800 rounded-lg p-3">
-                    <div>
-                      <div className="font-mono text-sm text-slate-300">{k.keyString}</div>
-                      <div className={`text-xs mt-1 ${k.isSold ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {k.isSold ? 'Sold' : 'Available'}
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setKeyToDelete(k.id)}
-                      className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                      title="Delete Key"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+          <div className="max-h-[520px] space-y-2 overflow-y-auto pr-2">
+            {visibleKeys.map(key => (
+              <div key={key.id} className="flex items-center justify-between gap-4 border border-white/10 bg-black p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-mono text-sm text-zinc-200">{key.keyString}</div>
+                  <div className={`mt-1 text-xs font-black uppercase ${key.isSold ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {key.isSold ? `Sold${key.ownerName ? ` to ${key.ownerName}` : ''}` : 'Available'}
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+                <button onClick={() => setKeyToDelete(key.id)} className="p-2 text-zinc-500 hover:bg-red-500/10 hover:text-red-300">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            {visibleKeys.length === 0 && <div className="py-12 text-center text-sm text-zinc-600">No keys in this category yet.</div>}
           </div>
-        </div>
-      )}
+        </section>
+      </div>
     </div>
   );
 }

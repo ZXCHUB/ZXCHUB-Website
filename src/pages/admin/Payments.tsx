@@ -12,8 +12,6 @@ export default function AdminPayments() {
   const [paypalClientId, setPaypalClientId] = useState('');
   const [paypalSecret, setPaypalSecret] = useState('');
 
-  const [balanceEnabled, setBalanceEnabled] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'} | null>(null);
 
@@ -36,7 +34,6 @@ export default function AdminPayments() {
           setPaypalClientId(data.paypal?.clientId || '');
           setPaypalSecret(data.paypal?.secret || '');
 
-          setBalanceEnabled(data.balance?.enabled || false);
         }
       } catch (e) {
         console.error(e);
@@ -52,7 +49,6 @@ export default function AdminPayments() {
       await setDoc(doc(db, 'settings', 'payments'), {
         stripe: { enabled: stripeEnabled, apiKey: stripeApiKey, pubKey: stripePubKey },
         paypal: { enabled: paypalEnabled, clientId: paypalClientId, secret: paypalSecret },
-        balance: { enabled: balanceEnabled },
         updatedAt: Date.now()
       }, { merge: true });
       showToast('Payment settings saved successfully!');

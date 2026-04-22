@@ -9,11 +9,6 @@ interface UserProfile {
   displayName: string;
   photoURL: string;
   role: 'admin' | 'user' | 'support';
-  balance: number;
-  discountPercentage?: number;
-  reviewDiscountAvailable?: boolean;
-  affiliateEarnings?: number;
-  affiliateCode?: string;
   discordId?: string;
   discordUsername?: string;
   discordAccessToken?: string;
@@ -23,28 +18,12 @@ interface UserProfile {
   lastCountry?: string;
 }
 
-export interface CartItem {
-  id: string;
-  productId: string;
-  variantId: string;
-  title: string;
-  variantName: string;
-  price: number;
-  quantity: number;
-  image: string;
-}
-
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
   login: () => Promise<any>;
   logout: () => Promise<void>;
-  cart: CartItem[];
-  addToCart: (item: CartItem) => void;
-  removeFromCart: (id: string) => void;
-  clearCart: () => void;
-  cartTotal: number;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,40 +32,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<CartItem[]>([]);
-
-  useEffect(() => {
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch {
-        localStorage.removeItem('cart');
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart));
-  }, [cart]);
-
-  const addToCart = (item: CartItem) => {
-    setCart(prev => {
-      const existing = prev.find(i => i.id === item.id);
-      if (existing) {
-        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + item.quantity } : i);
-      }
-      return [...prev, item];
-    });
-  };
-
-  const removeFromCart = (id: string) => {
-    setCart(prev => prev.filter(i => i.id !== id));
-  };
-
-  const clearCart = () => setCart([]);
-
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
@@ -128,7 +73,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               displayName: firebaseUser.displayName || defaultName,
               photoURL: firebaseUser.photoURL || '',
               role: isAdminEmail ? 'admin' : 'user',
-              balance: 0,
               createdAt: Date.now(),
               lastIp,
               lastCountry
@@ -153,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login: loginWithGoogle, logout, cart, addToCart, removeFromCart, clearCart, cartTotal }}>
+    <AuthContext.Provider value={{ user, profile, loading, login: loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );

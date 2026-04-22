@@ -13,7 +13,7 @@ interface SEOProps {
 export default function SEO({ 
   title = "ZXCHUB | Roblox Scripts and Keys", 
   description = "Browse ZXCHUB scripts, get key access, and manage your purchases.", 
-  image = "/background.png", 
+  image = "/logo.png", 
   url,
   type = "website",
   themeColor = "#ef4444"

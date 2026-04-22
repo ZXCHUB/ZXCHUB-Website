@@ -9,11 +9,6 @@ import BrandName from '../components/BrandName';
 
 type FilterMode = 'all' | 'free' | 'premium';
 
-const stableNumber = (seed: string, min: number, range: number) => {
-  const hash = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return min + (hash % range);
-};
-
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,15 +30,13 @@ export default function Products() {
   }, []);
 
   const filteredProducts = useMemo(() => products.filter(product => {
+    if (product.slug === 'zxchub-key') return false;
+    if ((product.visibility || 'public') !== 'public') return false;
     const searchText = `${product.title || ''} ${product.description || ''}`.toLowerCase();
     if (keyword && !searchText.includes(keyword.toLowerCase())) return false;
 
-    const startingPrice = product.variants?.length
-      ? Math.min(...product.variants.map((variant: any) => Number(variant.price || 0)))
-      : 0;
-
-    if (mode === 'free') return Boolean(product.isFree) || startingPrice === 0;
-    if (mode === 'premium') return !product.isFree && startingPrice > 0;
+    if (mode === 'free') return !product.isPaid;
+    if (mode === 'premium') return Boolean(product.isPaid);
     return true;
   }), [products, keyword, mode]);
 
@@ -116,8 +109,8 @@ export default function Products() {
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredProducts.map(script => {
-              const likes = Number(script.likes || script.favorites || stableNumber(script.id, 20, 70));
-              const views = Number(script.views || stableNumber(script.id + script.title, 250, 15000));
+              const likes = Number(script.likes || 0);
+              const views = Number(script.views || 0);
 
               return (
                 <Link

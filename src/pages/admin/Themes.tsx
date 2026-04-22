@@ -28,7 +28,7 @@ const themes: ThemeOption[] = [
   {
     id: 'classic',
     name: 'Classic',
-    description: 'The original storefront: background image first, products below.',
+    description: 'The original hub layout: background image first, scripts below.',
     preview: 'bg-[linear-gradient(180deg,rgba(11,14,20,0)_0%,rgba(11,14,20,.25)_55%,#0B0E14_100%)]',
     accent: 'text-indigo-300',
     button: 'bg-indigo-600 text-white',
@@ -72,7 +72,7 @@ const themes: ThemeOption[] = [
   {
     id: 'vault',
     name: 'Vault',
-    description: 'Premium dark storefront with emerald glow and sharper contrast.',
+    description: 'Premium dark hub style with emerald glow and sharper contrast.',
     preview: 'bg-[radial-gradient(circle_at_78%_24%,rgba(16,185,129,.38),transparent_36%),linear-gradient(135deg,#05070c,#0f172a_60%,#020617)]',
     accent: 'text-emerald-200',
     button: 'bg-emerald-500 text-black',
@@ -94,7 +94,7 @@ const themes: ThemeOption[] = [
   {
     id: 'arcade',
     name: 'Arcade',
-    description: 'High-energy neon style for a louder gaming storefront.',
+    description: 'High-energy neon style for a louder gaming hub.',
     preview: 'bg-[linear-gradient(135deg,rgba(236,72,153,.45),transparent_30%),radial-gradient(circle_at_65%_35%,rgba(139,92,246,.5),transparent_38%),#080711]',
     accent: 'text-fuchsia-200',
     button: 'bg-pink-500 text-white',
@@ -188,7 +188,7 @@ const themes: ThemeOption[] = [
     button: 'bg-lime-300 text-slate-950',
     panel: 'bg-black/72 border-lime-300/25',
     text: 'text-white',
-    eyebrow: 'Console-style product drop'
+    eyebrow: 'Console-style script drop'
   },
   {
     id: 'midnight',
@@ -204,13 +204,13 @@ const themes: ThemeOption[] = [
   {
     id: 'daylight',
     name: 'Daylight',
-    description: 'Clean light storefront with strong black text and blue action.',
+    description: 'Clean light hub layout with strong black text and blue action.',
     preview: 'bg-[linear-gradient(135deg,#f8fafc_0%,#dbeafe_48%,#1d4ed8_100%)]',
     accent: 'text-blue-800',
     button: 'bg-blue-600 text-white',
     panel: 'bg-white/82 border-blue-200/80',
     text: 'text-slate-950',
-    eyebrow: 'Clean light storefront'
+    eyebrow: 'Clean light hub'
   }
 ];
 
@@ -218,7 +218,7 @@ const layoutStyles: LayoutStyle[] = [
   {
     id: 'image',
     name: 'Full Image',
-    description: 'Old clean homepage: full-screen background image, then products below.',
+    description: 'Old clean homepage: full-screen background image, then scripts below.',
     previewLayout: 'image'
   },
   {
@@ -235,14 +235,14 @@ const layoutStyles: LayoutStyle[] = [
   },
   {
     id: 'split',
-    name: 'Split Product',
-    description: 'Hero text plus a featured product panel on the right.',
+    name: 'Split Script',
+    description: 'Hero text plus a featured script panel on the right.',
     previewLayout: 'split'
   },
   {
     id: 'showcase',
     name: 'Showcase',
-    description: 'Centered hero with quick product tiles under the buttons.',
+    description: 'Centered hero with quick script tiles under the buttons.',
     previewLayout: 'showcase'
   },
   {
@@ -254,7 +254,7 @@ const layoutStyles: LayoutStyle[] = [
   {
     id: 'compact',
     name: 'Compact',
-    description: 'Shorter hero so customers see products faster.',
+    description: 'Shorter hero so visitors see scripts faster.',
     previewLayout: 'compact'
   },
   {
@@ -347,7 +347,7 @@ export default function AdminThemes() {
               <BrandName className="text-sm" />
               <div className="hidden items-center gap-4 text-[11px] font-semibold text-white/65 sm:flex">
                 <span>Home</span>
-                <span>Products</span>
+                <span>Scripts</span>
                 <span>Profile</span>
               </div>
               <div className={`h-7 rounded px-3 py-1 text-[11px] font-bold ${selectedTheme.button}`}>
@@ -397,14 +397,14 @@ export default function AdminThemes() {
                       <BrandName />
                     </h3>
                     <p className={`mt-3 max-w-md text-sm ${selectedTheme.text === 'text-slate-950' ? 'text-slate-700' : 'text-white/70'}`}>
-                      Browse products, pay securely, and receive your items instantly.
+                      Browse scripts, get a key, and receive access instantly.
                     </p>
                     <div className={`mt-5 flex flex-wrap gap-2 ${
                       selectedLayout.previewLayout === 'center' || selectedLayout.previewLayout === 'showcase' ? 'justify-center' : ''
                     }`}>
-                      <div className={`rounded px-4 py-2 text-xs font-bold ${selectedTheme.button}`}>Browse Products</div>
+                      <div className={`rounded px-4 py-2 text-xs font-bold ${selectedTheme.button}`}>Browse Scripts</div>
                       <div className={`rounded border px-4 py-2 text-xs font-bold ${selectedTheme.text === 'text-slate-950' ? 'border-slate-900/20 text-slate-900' : 'border-white/15 text-white'}`}>
-                        Reviews
+                        Get Key
                       </div>
                     </div>
 
@@ -425,7 +425,7 @@ export default function AdminThemes() {
                       <div className="mt-4 text-sm">
                         <BrandName />
                       </div>
-                      <div className={`mt-1 text-xs ${selectedTheme.text === 'text-slate-950' ? 'text-slate-600' : 'text-white/55'}`}>Premium digital product</div>
+                      <div className={`mt-1 text-xs ${selectedTheme.text === 'text-slate-950' ? 'text-slate-600' : 'text-white/55'}`}>Premium script hub access</div>
                       <div className="mt-4 flex items-center justify-between">
                         <span className={`text-lg font-black ${selectedTheme.text}`}>$1.80</span>
                         <span className={`rounded px-3 py-1 text-xs font-bold ${selectedTheme.button}`}>View</span>

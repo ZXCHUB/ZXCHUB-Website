@@ -113,7 +113,7 @@ export default function AdminDashboard() {
 
         const productSales: Record<string, { title: string, sales: number, revenue: number }> = {};
         orders.forEach(o => {
-          const pTitle = o.productTitle || o.productName || 'Unknown Product';
+          const pTitle = o.planName || o.productTitle || o.productName || 'ZXCHUB Key';
           if (!productSales[pTitle]) {
             productSales[pTitle] = { title: pTitle, sales: 0, revenue: 0 };
           }
@@ -268,7 +268,7 @@ export default function AdminDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-1">Discover the latest updates and insights regarding your store today.</p>
+          <p className="text-sm text-slate-400 mt-1">Track key sales, customers, and traffic for your hub.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative" ref={dropdownRef}>
@@ -364,11 +364,10 @@ export default function AdminDashboard() {
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-slate-400 bg-[#1a2332] uppercase">
                   <tr>
-                    <th className="px-6 py-4 font-medium">Products</th>
+                    <th className="px-6 py-4 font-medium">Item</th>
                     <th className="px-6 py-4 font-medium">Price</th>
                     <th className="px-6 py-4 font-medium">Paid</th>
                     <th className="px-6 py-4 font-medium">Payment Method</th>
-                    <th className="px-6 py-4 font-medium">Promo Code</th>
                     <th className="px-6 py-4 font-medium">E-mail</th>
                     <th className="px-6 py-4 font-medium">Time</th>
                   </tr>
@@ -376,25 +375,17 @@ export default function AdminDashboard() {
                 <tbody>
                   {recentOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-8 text-center text-slate-500">No results found.</td>
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-500">No results found.</td>
                     </tr>
                   ) : (
                     recentOrders.map(order => {
                       const user = allUsers?.find(u => u.id === order.userId);
                       return (
                         <tr key={order.id} className="border-b border-[#222b3d]">
-                          <td className="px-6 py-4">{order.productTitle || order.productName || 'Unknown Product'}</td>
+                          <td className="px-6 py-4">{order.productTitle || order.productName || 'ZXCHUB Key'}</td>
                           <td className="px-6 py-4">${order.amount?.toFixed(2)}</td>
                           <td className="px-6 py-4 text-emerald-400">+${order.amount?.toFixed(2)}</td>
                           <td className="px-6 py-4 capitalize">{order.method || order.paymentMethod || 'Stripe'}</td>
-                          <td className="px-6 py-4 text-slate-400">
-                            {order.promoCode ? (
-                              <div>
-                                <span className="font-medium text-white">{order.promoCode}</span>
-                                {order.promoDetails && <span className="text-xs ml-1 text-indigo-400">({order.promoDetails})</span>}
-                              </div>
-                            ) : '-'}
-                          </td>
                           <td className="px-6 py-4">{user?.email || order.userEmail || 'Unknown'}</td>
                           <td className="px-6 py-4">{new Date(order.createdAt).toLocaleString()}</td>
                         </tr>
@@ -409,13 +400,13 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-[#161d2b] border border-[#222b3d] rounded-xl overflow-hidden">
               <div className="p-6 border-b border-[#222b3d]">
-                <h3 className="text-lg font-bold">Top 5 Products</h3>
+                <h3 className="text-lg font-bold">Top Key Plans</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="text-xs text-slate-400 bg-[#1a2332] uppercase">
                     <tr>
-                      <th className="px-6 py-4 font-medium">Product</th>
+                      <th className="px-6 py-4 font-medium">Plan</th>
                       <th className="px-6 py-4 font-medium">Total Sales</th>
                       <th className="px-6 py-4 font-medium">Total Revenue</th>
                     </tr>

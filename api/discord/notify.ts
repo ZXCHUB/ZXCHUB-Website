@@ -61,8 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { name: 'Customer', value: user.email || order.userId || 'Unknown', inline: true },
             { name: 'Discord', value: user.discordUsername || user.discordId || 'Not linked', inline: true },
             { name: 'Amount', value: `$${Number(order.amount || 0).toFixed(2)}`, inline: true },
-            { name: 'Scripts', value: (order.items || []).map((item: any) => `${item.productName} (${item.variantName || 'Standard'})`).join('\n') || order.productTitle || 'Order' },
-            { name: 'Promo', value: order.promoCode || 'None', inline: true },
+            { name: 'Key', value: (order.items || []).map((item: any) => `${item.productName} (${item.variantName || 'Standard'})`).join('\n') || order.productTitle || 'ZXCHUB Key' },
             { name: 'Order ID', value: orderId, inline: false }
           ],
           timestamp: new Date(order.createdAt || Date.now()).toISOString()

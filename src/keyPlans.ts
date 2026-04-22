@@ -7,6 +7,8 @@ export const ZXCHUB_KEY_PLANS = [
   { id: 'lifetime', name: 'Lifetime', price: 14.99, robux: '5000 R$', funpay: '1155 RUB' }
 ];
 
+export const PAID_WEB_KEY_PLANS = ZXCHUB_KEY_PLANS.filter(plan => plan.id !== '1-day');
+
 export function getZxchubKeyPlan(planId?: string) {
   return ZXCHUB_KEY_PLANS.find(plan => plan.id === planId) || ZXCHUB_KEY_PLANS[1];
 }

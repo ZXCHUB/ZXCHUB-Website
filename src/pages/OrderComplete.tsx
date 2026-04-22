@@ -23,7 +23,7 @@ function buildDownloadText(order: any) {
     `Date: ${new Date(order.createdAt || Date.now()).toLocaleString()}`,
     `Total: $${Number(order.amount || 0).toFixed(2)}`,
     '',
-    'Delivered Items'
+    'Delivered Keys'
   ];
 
   (order.items || []).forEach((item: any, index: number) => {
@@ -147,18 +147,6 @@ export default function OrderComplete() {
                 <span>Subtotal</span>
                 <span>${Number(order.subtotal || order.amount || 0).toFixed(2)}</span>
               </div>
-              {order.discountPercent > 0 && (
-                <div className="flex justify-between text-green-400">
-                  <span>{order.reviewDiscountApplied ? 'Review Reward' : 'Discount'} ({order.discountPercent}%)</span>
-                  <span>-${Number(order.discountAmount || (Number(order.subtotal || 0) * (Number(order.discountPercent) / 100))).toFixed(2)}</span>
-                </div>
-              )}
-              {order.balanceUsed > 0 && (
-                <div className="flex justify-between text-indigo-400">
-                  <span>Balance Used</span>
-                  <span>-${Number(order.balanceUsed).toFixed(2)}</span>
-                </div>
-              )}
               <div className="flex justify-between text-white font-bold pt-3 border-t border-zinc-800/50">
                 <span>Total</span>
                 <span>${Number(order.amount || 0).toFixed(2)}</span>
@@ -189,7 +177,7 @@ export default function OrderComplete() {
               </div>
               <div className="text-white font-bold border-b-2 border-indigo-500 pb-4 -mb-[18px]">
                 <div className="text-xs text-zinc-400">Step 3</div>
-                Receive Your Items
+                Receive Your Key
               </div>
             </div>
 
@@ -198,11 +186,11 @@ export default function OrderComplete() {
                 <Check className="w-8 h-8 text-emerald-400" />
               </div>
               <h1 className="text-2xl font-bold">Order Complete</h1>
-              <p className="text-zinc-400 mt-2">Your items are ready. Check below for your product.</p>
+              <p className="text-zinc-400 mt-2">Your ZXCHUB key is ready and saved in My Purchases.</p>
             </section>
 
             <section className="mb-10">
-              <h2 className="text-lg font-bold mb-5">Delivered Items</h2>
+              <h2 className="text-lg font-bold mb-5">Delivered Key</h2>
               <div className="space-y-4">
                 {items.map((item: any) => {
                   const isOpen = openItemId === item.keyId;
@@ -228,7 +216,7 @@ export default function OrderComplete() {
                             <div className="text-xs uppercase tracking-wider text-zinc-500 mb-3">Instructions</div>
                             <div className="relative mb-6 min-h-[320px] overflow-hidden rounded-lg border border-zinc-800 bg-black/20 p-5">
                               <div className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-300">
-                                {item.instructions || 'No special instructions were added for this product.'}
+                                {item.instructions || 'Use this key inside ZXCHUB. You can also find it later in My Purchases.'}
                               </div>
                               {(item.instructionImages?.length ? item.instructionImages : [item.instructionImage]).map((image: any, index: number) => image?.url ? (
                                 <img

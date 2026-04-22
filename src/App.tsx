@@ -15,33 +15,16 @@ const OrderComplete = lazy(() => import('./pages/OrderComplete'));
 
 const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
-const AdminProducts = lazy(() => import('./pages/admin/Products'));
-const AdminInstructions = lazy(() => import('./pages/admin/Instructions'));
+const AdminScripts = lazy(() => import('./pages/admin/Scripts'));
 const AdminKeys = lazy(() => import('./pages/admin/Keys'));
-const AdminPromoCodes = lazy(() => import('./pages/admin/PromoCodes'));
 const AdminCustomers = lazy(() => import('./pages/admin/Customers'));
 const AdminInvoices = lazy(() => import('./pages/admin/Invoices'));
 const AdminTickets = lazy(() => import('./pages/admin/Tickets'));
 const AdminDiscord = lazy(() => import('./pages/admin/Discord'));
 const AdminPayments = lazy(() => import('./pages/admin/Payments'));
 const AdminTeam = lazy(() => import('./pages/admin/Team'));
-const AdminDiscounts = lazy(() => import('./pages/admin/Discounts'));
 const AdminAnnouncements = lazy(() => import('./pages/admin/Announcements'));
 const AdminThemes = lazy(() => import('./pages/admin/Themes'));
-
-function AffiliateTracker() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get('a');
-    if (ref) {
-      localStorage.setItem('affiliate_ref', JSON.stringify({
-        code: ref,
-        timestamp: Date.now()
-      }));
-    }
-  }, []);
-  return null;
-}
 
 function PageviewTracker() {
   const location = useLocation();
@@ -87,7 +70,6 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <AffiliateTracker />
         <PageviewTracker />
         <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -96,25 +78,20 @@ export default function App() {
             <Route path="/get-key" element={<GetKey />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/product/:slug" element={<ProductPage />} />
-            <Route path="/checkout/cart" element={<Checkout />} />
             <Route path="/checkout/key/:variantId" element={<Checkout />} />
-            <Route path="/checkout/:productId/:variantId" element={<Checkout />} />
             <Route path="/order/:transactionId" element={<OrderComplete />} />
             <Route path="/refund-policy" element={<RefundPolicy />} />
 
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminDashboard />} />
-              <Route path="products" element={<AdminProducts />} />
-              <Route path="products/keys" element={<AdminKeys />} />
-              <Route path="products/instructions" element={<AdminInstructions />} />
+              <Route path="scripts" element={<AdminScripts />} />
+              <Route path="scripts/keys" element={<AdminKeys />} />
               <Route path="orders/customers" element={<AdminCustomers />} />
               <Route path="orders/invoices" element={<AdminInvoices />} />
-              <Route path="orders/promocodes" element={<AdminPromoCodes />} />
               <Route path="orders/tickets" element={<AdminTickets />} />
               <Route path="settings/discord" element={<AdminDiscord />} />
               <Route path="settings/payments" element={<AdminPayments />} />
               <Route path="settings/team" element={<AdminTeam />} />
-              <Route path="settings/discounts" element={<AdminDiscounts />} />
               <Route path="settings/announcements" element={<AdminAnnouncements />} />
               <Route path="settings/themes" element={<AdminThemes />} />
               <Route path="*" element={<AdminNotFound />} />

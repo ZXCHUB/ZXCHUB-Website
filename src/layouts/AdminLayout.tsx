@@ -3,10 +3,9 @@ import { Link, Outlet, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import BrandName from '../components/BrandName';
 import {
-  Home, Menu, ListOrdered, Receipt, Users, Star, Ticket,
-  Wallet, Store, Shield, ShieldBan, ShieldCheck, FileText,
-  Settings, CreditCard, UsersRound, Globe, Upload, User,
-  ChevronDown, ChevronRight, BookOpen, Percent, Megaphone, Palette
+  Home, Code2, ListOrdered, Receipt, Users, Ticket,
+  Settings, CreditCard, UsersRound, User,
+  ChevronDown, ChevronRight, KeyRound, Megaphone, Palette
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -111,13 +110,12 @@ export default function AdminLayout() {
                 <NavItem icon={Home} label="Dashboard" to="/admin" isActive={location.pathname === '/admin'} />
                 
                 <NavItem 
-                  icon={Menu} 
-                  label="Products" 
-                  isActive={isPathPrefixActive('/admin/products')}
+                  icon={Code2} 
+                  label="Scripts" 
+                  isActive={isPathPrefixActive('/admin/scripts')}
                   children={[
-                    { label: 'All Products', to: '/admin/products', icon: Menu },
-                    { label: 'Keys/Inventory', to: '/admin/products/keys', icon: FileText },
-                    { label: 'Instructions', to: '/admin/products/instructions', icon: BookOpen },
+                    { label: 'All Scripts', to: '/admin/scripts', icon: Code2 },
+                    { label: 'Key Inventory', to: '/admin/scripts/keys', icon: KeyRound },
                   ]}
                 />
               </>
@@ -131,7 +129,6 @@ export default function AdminLayout() {
                 ...(!isSupport ? [
                   { label: 'Invoices', to: '/admin/orders/invoices', icon: Receipt },
                   { label: 'Customers', to: '/admin/orders/customers', icon: Users },
-                  { label: 'Promo Codes', to: '/admin/orders/promocodes', icon: Star },
                 ] : []),
                 { label: 'Tickets', to: '/admin/orders/tickets', icon: Ticket },
               ]}
@@ -148,7 +145,6 @@ export default function AdminLayout() {
                   { label: 'Discord', to: '/admin/settings/discord', icon: Settings },
                   { label: 'Payment Methods', to: '/admin/settings/payments', icon: CreditCard },
                   { label: 'Team', to: '/admin/settings/team', icon: UsersRound },
-                  { label: 'Discounts', to: '/admin/settings/discounts', icon: Percent },
                   { label: 'Announcements', to: '/admin/settings/announcements', icon: Megaphone },
                   { label: 'Themes', to: '/admin/settings/themes', icon: Palette },
                 ]}

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { collection, doc, getDoc, getDocs, limit, query, runTransaction, where, updateDoc } from 'firebase/firestore';
-import { ArrowRight, CreditCard, Gamepad2, Ticket } from 'lucide-react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { collection, doc, getDoc, getDocs, limit, query, runTransaction, where } from 'firebase/firestore';
+import { ArrowRight, CreditCard, KeyRound, ShieldCheck, Ticket } from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import SEO from '../components/SEO';
-import { getZxchubKeyPlan, ZXCHUB_KEY_PRODUCT_ID } from '../keyPlans';
 import BrandName from '../components/BrandName';
+import { getZxchubKeyPlan, PAID_WEB_KEY_PLANS, ZXCHUB_KEY_PRODUCT_ID } from '../keyPlans';
 
 declare global {
   interface Window {
@@ -15,527 +15,109 @@ declare global {
 }
 
 export default function Checkout() {
-  const { productId, variantId } = useParams();
-  const { user, profile, cart, cartTotal, clearCart } = useAuth();
+  const { variantId } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { user, profile, loading, login } = useAuth();
+  const plan = getZxchubKeyPlan(variantId);
+  const isPaidPlan = PAID_WEB_KEY_PLANS.some(item => item.id === plan.id);
 
-  const isZxchubKeyCheckout = productId === 'key';
-  const isCartCheckout = !productId;
-  const zxchubPlan = getZxchubKeyPlan(variantId);
-
-  const [product, setProduct] = useState<any>(null);
-  const [variant, setVariant] = useState<any>(null);
-  const [quantity, setQuantity] = useState(1);
-
-  const [promoCode, setPromoCode] = useState('');
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [appliedPromo, setAppliedPromo] = useState<any>(null);
-  const [promoError, setPromoError] = useState('');
-  const [promoSuccess, setPromoSuccess] = useState('');
-
-  const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'paypal'>('stripe');
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'paypal'>(params.get('method') === 'paypal' ? 'paypal' : 'stripe');
+  const [paymentSettings, setPaymentSettings] = useState<any>(null);
   const [paypalClientId, setPaypalClientId] = useState('');
   const [isPayPalReady, setIsPayPalReady] = useState(false);
-  
-  const [paymentSettings, setPaymentSettings] = useState<any>(null);
-  const [discountSettings, setDiscountSettings] = useState({
-    reviewDiscountPercent: 5,
-    affiliateCommissionPercent: 20
-  });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const [paymentsSnap, discountsSnap] = await Promise.all([
-          getDoc(doc(db, 'settings', 'payments')),
-          getDoc(doc(db, 'settings', 'discounts'))
-        ]);
-        if (paymentsSnap.exists()) {
-          setPaymentSettings(paymentsSnap.data());
-        }
-        if (discountsSnap.exists()) {
-          const data = discountsSnap.data() as any;
-          setDiscountSettings({
-            reviewDiscountPercent: Number(data.reviewDiscountPercent ?? 5),
-            affiliateCommissionPercent: Number(data.affiliateCommissionPercent ?? 20)
-          });
-        }
-      } catch(e) {}
+    const loadSettings = async () => {
+      const snap = await getDoc(doc(db, 'settings', 'payments')).catch(() => null);
+      setPaymentSettings(snap?.exists() ? snap.data() : null);
     };
-    fetchSettings();
-  },[]);
+    loadSettings();
+  }, []);
 
   useEffect(() => {
-    const loadPayPalConfig = async () => {
+    const loadPayPal = async () => {
       if (!paymentSettings?.paypal?.enabled) return;
       try {
         const response = await fetch('/api/payments/paypal-client-config');
         const data = await response.json();
-        setPaypalClientId(data.clientId || paymentSettings?.paypal?.clientId || '');
+        setPaypalClientId(data.clientId || paymentSettings.paypal.clientId || '');
       } catch {
-        setPaypalClientId(paymentSettings?.paypal?.clientId || '');
+        setPaypalClientId(paymentSettings.paypal.clientId || '');
       }
     };
-    loadPayPalConfig();
+    loadPayPal();
   }, [paymentSettings?.paypal?.enabled, paymentSettings?.paypal?.clientId]);
-
-  useEffect(() => {
-    const method = new URLSearchParams(window.location.search).get('method');
-    if (method === 'paypal') setPaymentMethod('paypal');
-    if (method === 'card') setPaymentMethod('stripe');
-  }, []);
-
-  useEffect(() => {
-    if (isCartCheckout) {
-      if (cart.length === 0) {
-        navigate('/');
-      }
-      return;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const qty = parseInt(params.get('qty') || '1', 10);
-    setQuantity(qty > 0 ? qty : 1);
-
-    const fetchProduct = async () => {
-      if (!productId || isZxchubKeyCheckout) return;
-      const docSnap = await getDoc(doc(db, 'products', productId));
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setProduct(data);
-        const selected = data.variants?.find((item: any) => item.id === variantId);
-        if (selected) {
-          setVariant(selected);
-        }
-      }
-    };
-
-    fetchProduct();
-  }, [productId, variantId, isCartCheckout, isZxchubKeyCheckout, cart, navigate]);
-
-  const subtotal = isZxchubKeyCheckout ? zxchubPlan.price * quantity : isCartCheckout ? cartTotal : (variant?.price || 0) * quantity;
-  const getProductSubtotal = (targetProductId?: string | null) => {
-    if (!targetProductId) return subtotal;
-    if (isCartCheckout) {
-      return cart
-        .filter(item => item.productId === targetProductId)
-        .reduce((sum, item) => sum + item.price * item.quantity, 0);
-    }
-    return productId === targetProductId ? subtotal : 0;
-  };
-  const promoDiscountBase = appliedPromo?.productScope === 'product' ? getProductSubtotal(appliedPromo.productId) : subtotal;
-  const promoDiscountAmount = discountPercent > 0 ? promoDiscountBase * (discountPercent / 100) : 0;
-  const reviewDiscountPercent = profile?.reviewDiscountAvailable && discountPercent === 0 ? Number(discountSettings.reviewDiscountPercent || 0) : 0;
-  const reviewDiscountAmount = reviewDiscountPercent > 0 ? subtotal * (reviewDiscountPercent / 100) : 0;
-  const effectiveDiscountPercent = discountPercent > 0 ? discountPercent : reviewDiscountPercent;
-  const discountAmount = discountPercent > 0 ? promoDiscountAmount : reviewDiscountAmount;
-  const totalAfterDiscount = Math.max(0, subtotal - discountAmount);
-  const balanceToUse = 0;
-  const finalAmount = totalAfterDiscount - balanceToUse;
-
-  const handleApplyPromo = async (codeToApply?: string) => {
-    const code = codeToApply || promoCode;
-    setPromoError('');
-    setPromoSuccess('');
-    if (!code.trim()) return;
-
-    try {
-      const promoSnap = await getDocs(
-        query(collection(db, 'promocodes'), where('code', '==', code.toUpperCase()))
-      );
-
-      if (promoSnap.empty) {
-        setPromoError('Invalid coupon code');
-        return;
-      }
-
-      const promo = promoSnap.docs[0].data();
-      const scopedProductId = promo.productScope === 'product' ? promo.productId : null;
-
-      if (promo.maxUses > 0 && promo.uses >= promo.maxUses) {
-        setPromoError('Coupon code has reached maximum uses');
-        return;
-      }
-
-      const userUses = promo.usedBy?.[user?.uid || ''] || 0;
-      if (promo.maxUsesPerUser > 0 && userUses >= promo.maxUsesPerUser) {
-        setPromoError('You have reached the maximum uses for this coupon');
-        return;
-      }
-
-      if (promo.type === 'discount') {
-        if (scopedProductId && getProductSubtotal(scopedProductId) <= 0) {
-          setPromoError(`This coupon only works for ${promo.productTitle || 'a specific product'}.`);
-          return;
-        }
-        setDiscountPercent(promo.value);
-        setAppliedPromo({
-          code: code.toUpperCase(),
-          value: promo.value,
-          productScope: promo.productScope || 'all',
-          productId: scopedProductId,
-          productTitle: promo.productTitle || ''
-        });
-        setPromoCode(code.toUpperCase());
-        setPromoSuccess(
-          scopedProductId
-            ? `Applied ${promo.value}% discount to ${promo.productTitle || 'selected product'}!`
-            : `Applied ${promo.value}% discount!`
-        );
-      } else {
-        setPromoError('This coupon is only for balance top-ups.');
-      }
-    } catch {
-      setPromoError('Failed to apply coupon');
-    }
-  };
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get('session_id');
-
-    if (sessionId && user && profile && (isZxchubKeyCheckout || isCartCheckout || (product && variant))) {
-      const verifySession = async () => {
-        try {
-          const existingTransaction = await getDocs(
-            query(collection(db, 'transactions'), where('sessionId', '==', sessionId))
-          );
-
-          if (!existingTransaction.empty) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-            navigate(`/order/${existingTransaction.docs[0].id}`);
-            return;
-          }
-
-          const res = await fetch('/api/payments/verify-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId })
-          });
-          const data = await res.json();
-
-          if (data.success && data.metadata?.userId === user.uid) {
-            await processOrder(sessionId, data.metadata);
-          }
-        } catch (verifyError) {
-          console.error('Failed to verify session', verifyError);
-        } finally {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      };
-
-      verifySession();
-    }
-  }, [user, profile, product, variant, isCartCheckout, isZxchubKeyCheckout, navigate]);
 
   const processOrder = async (sessionId?: string, metadata?: any) => {
     if (!user || !profile) return;
-    if (!isCartCheckout && !isZxchubKeyCheckout && (!product || !variant)) return;
-    if (isCartCheckout && cart.length === 0) return;
-
     setIsProcessing(true);
     setError('');
 
     try {
-      const keysToBuy: Array<{ docId: string; price: number; title: string; productId: string; variantId: string; variantName: string; image?: string; instructions?: string; instructionImage?: any; instructionImages?: any[] }> = [];
-      const productsById: Record<string, any> = {};
+      const stockQuery = query(
+        collection(db, 'keys'),
+        where('productId', '==', ZXCHUB_KEY_PRODUCT_ID),
+        where('variantId', '==', plan.id),
+        where('isSold', '==', false),
+        limit(1)
+      );
+      const keySnap = await getDocs(stockQuery);
 
-      if (isZxchubKeyCheckout) {
-        const productsSnap = await getDocs(collection(db, 'products'));
-        const keyProduct = productsSnap.docs
-          .map(d => ({ id: d.id, ...d.data() } as any))
-          .find(item => item.slug === ZXCHUB_KEY_PRODUCT_ID || String(item.title || '').toLowerCase() === 'zxchub key');
-        const normalizePlanName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const keyVariant = keyProduct?.variants?.find((item: any) => normalizePlanName(item.name || '') === normalizePlanName(zxchubPlan.name));
-        const inventoryProductId = keyProduct?.id || ZXCHUB_KEY_PRODUCT_ID;
-        const inventoryVariantId = keyVariant?.id || zxchubPlan.id;
-
-        const stockQuery = query(
-          collection(db, 'keys'),
-          where('productId', '==', inventoryProductId),
-          where('variantId', '==', inventoryVariantId),
-          where('isSold', '==', false),
-          limit(quantity)
-        );
-        const keySnap = await getDocs(stockQuery);
-
-        if (keySnap.docs.length < quantity) {
-          throw new Error(`Sorry, only ${keySnap.docs.length} ZXCHUB keys left for ${zxchubPlan.name}.`);
-        }
-
-        keysToBuy.push(...keySnap.docs.map(d => ({
-          docId: d.id,
-          price: zxchubPlan.price,
-          title: keyProduct?.title || 'ZXCHUB Key',
-          productId: inventoryProductId,
-          variantId: inventoryVariantId,
-          variantName: keyVariant?.name || zxchubPlan.name,
-          image: keyProduct?.image || '/logo.png',
-          instructions: keyProduct?.instructions || 'Open ZXCHUB, paste your key, and join discord.gg/zxchub if you need help.',
-          instructionImage: keyProduct?.instructionImage || null,
-          instructionImages: keyProduct?.instructionImages || []
-        })));
-      } else if (isCartCheckout) {
-        const productIds = Array.from(new Set(cart.map(item => item.productId)));
-        await Promise.all(productIds.map(async id => {
-          const snap = await getDoc(doc(db, 'products', id));
-          if (snap.exists()) {
-            productsById[id] = { id: snap.id, ...snap.data() };
-          }
-        }));
-
-        for (const item of cart) {
-          const stockQuery = query(
-            collection(db, 'keys'),
-            where('productId', '==', item.productId),
-            where('variantId', '==', item.variantId),
-            where('isSold', '==', false),
-            limit(item.quantity)
-          );
-          const snap = await getDocs(stockQuery);
-          if (snap.docs.length < item.quantity) {
-            throw new Error(`Not enough stock for ${item.title} (${item.variantName})`);
-          }
-          keysToBuy.push(...snap.docs.map(d => ({
-            docId: d.id,
-            price: item.price,
-            title: item.title,
-            productId: item.productId,
-            variantId: item.variantId,
-            variantName: item.variantName,
-            image: item.image,
-            instructions: productsById[item.productId]?.instructions || '',
-            instructionImage: productsById[item.productId]?.instructionImage || null,
-            instructionImages: productsById[item.productId]?.instructionImages || []
-          })));
-        }
-      } else {
-        const stockQuery = query(
-          collection(db, 'keys'),
-          where('productId', '==', productId),
-          where('variantId', '==', variantId),
-          where('isSold', '==', false),
-          limit(quantity)
-        );
-        const keySnap = await getDocs(stockQuery);
-
-        if (keySnap.docs.length < quantity) {
-          throw new Error(`Sorry, only ${keySnap.docs.length} keys left in stock!`);
-        }
-
-        keysToBuy.push(...keySnap.docs.map(d => ({
-          docId: d.id,
-          price: variant.price,
-          title: product.title,
-          productId: productId!,
-          variantId: variantId!,
-          variantName: variant.name,
-          image: product.image,
-          instructions: product.instructions || '',
-          instructionImage: product.instructionImage || null,
-          instructionImages: product.instructionImages || []
-        })));
+      if (keySnap.empty) {
+        throw new Error(`No ${plan.name} keys left in stock.`);
       }
 
-      const appliedDiscountPercent = metadata?.discountPercent ? Number(metadata.discountPercent) : effectiveDiscountPercent;
-      const appliedPromoCode = metadata?.promoCode || promoCode;
-      const appliedBalanceToUse = metadata?.balanceUsed ? Number(metadata.balanceUsed) : balanceToUse;
-      const appliedReviewDiscount = metadata?.reviewDiscount === 'true' || (reviewDiscountPercent > 0 && !appliedPromoCode);
-      const currentSubtotal = isZxchubKeyCheckout ? zxchubPlan.price * quantity : isCartCheckout ? cartTotal : (variant?.price || 0) * quantity;
-      const metadataPromoProductId = metadata?.promoProductId || appliedPromo?.productId || null;
-      const currentPromoDiscountBase = metadataPromoProductId ? getProductSubtotal(metadataPromoProductId) : currentSubtotal;
-      const currentDiscountBase = appliedReviewDiscount ? currentSubtotal : currentPromoDiscountBase;
-      const currentDiscountAmount = appliedDiscountPercent > 0 ? currentDiscountBase * (appliedDiscountPercent / 100) : 0;
-      const currentTotalAfterDiscount = Math.max(0, currentSubtotal - currentDiscountAmount);
-      const affiliateCommissionPercent = metadata?.affiliateCommissionPercent
-        ? Number(metadata.affiliateCommissionPercent)
-        : Number(discountSettings.affiliateCommissionPercent || 0);
-
-      const userRef = doc(db, 'users', user.uid);
-      const promoQuery =
-        appliedDiscountPercent > 0 && appliedPromoCode
-          ? query(collection(db, 'promocodes'), where('code', '==', appliedPromoCode.toUpperCase()))
-          : null;
-      const promoSnap = promoQuery ? await getDocs(promoQuery) : null;
-      const promoDocRef = promoSnap && !promoSnap.empty ? doc(db, 'promocodes', promoSnap.docs[0].id) : null;
-      const promoData = promoSnap && !promoSnap.empty ? promoSnap.docs[0].data() : null;
-
-      let affiliateDocRef = null;
-      if (promoData && promoData.isAffiliate && promoData.affiliateEmail) {
-        const affiliateQ = query(collection(db, 'users'), where('email', '==', promoData.affiliateEmail.toLowerCase()));
-        const affiliateSnap = await getDocs(affiliateQ);
-        if (!affiliateSnap.empty) {
-          affiliateDocRef = doc(db, 'users', affiliateSnap.docs[0].id);
-        }
-      }
-
+      const keyDoc = keySnap.docs[0];
+      const keyRef = doc(db, 'keys', keyDoc.id);
       const transactionRef = doc(collection(db, 'transactions'));
       const purchasedAt = Date.now();
 
-      let promoDetailsStr: string | null = null;
       await runTransaction(db, async transaction => {
-        const userSnap = await transaction.get(userRef);
-        if (!userSnap.exists()) {
-          throw new Error('User profile not found.');
-        }
+        const freshKey = await transaction.get(keyRef);
+        if (!freshKey.exists()) throw new Error('Selected key no longer exists.');
+        if (freshKey.data().isSold) throw new Error('This key was just sold. Please try again.');
 
-        const latestProfile = userSnap.data() as any;
-        const currentBalance = Number(latestProfile.balance || 0);
-        if (appliedBalanceToUse > currentBalance) {
-          throw new Error('Insufficient balance.');
-        }
+        const deliveredItem = {
+          keyId: keyRef.id,
+          keyString: freshKey.data().keyString,
+          productId: ZXCHUB_KEY_PRODUCT_ID,
+          variantId: plan.id,
+          productName: 'ZXCHUB Key',
+          variantName: plan.name,
+          price: plan.price,
+          image: '/logo.png',
+          instructions: 'Open ZXCHUB, paste your key, and join discord.gg/zxchub if you need help.'
+        };
 
-        const keyRefs = keysToBuy.map(key => doc(db, 'keys', key.docId));
-        const keySnaps = await Promise.all(keyRefs.map(ref => transaction.get(ref)));
-        const promoDocSnap = promoDocRef && promoData ? await transaction.get(promoDocRef) : null;
-        const affSnap = affiliateDocRef ? await transaction.get(affiliateDocRef) : null;
-
-        keySnaps.forEach((snap, index) => {
-          if (!snap.exists()) {
-            throw new Error('One of the selected keys no longer exists.');
-          }
-          if (snap.data().isSold) {
-            throw new Error(`Sorry, ${keysToBuy[index].title} just went out of stock. Please try again.`);
-          }
-        });
-
-        let promoUpdate: { uses: number; usedBy: Record<string, number> } | null = null;
-        if (promoDocRef && promoData) {
-          if (!promoDocSnap?.exists()) {
-            throw new Error('The coupon code is no longer available.');
-          }
-
-          const currentPromoData = promoDocSnap.data() as any;
-          const uses = Number(currentPromoData.uses || 0);
-          const maxUses = Number(currentPromoData.maxUses || 0);
-          const userUses = Number(currentPromoData.usedBy?.[user.uid] || 0);
-          const maxUsesPerUser = Number(currentPromoData.maxUsesPerUser || 0);
-
-          if (maxUses > 0 && uses >= maxUses) {
-            throw new Error('Coupon code has reached maximum uses.');
-          }
-          if (maxUsesPerUser > 0 && userUses >= maxUsesPerUser) {
-            throw new Error('You have reached the maximum uses for this coupon.');
-          }
-          if (currentPromoData.productScope === 'product') {
-            const scopedProductId = currentPromoData.productId;
-            const hasScopedProduct = keysToBuy.some(key => key.productId === scopedProductId);
-            if (!hasScopedProduct || currentPromoDiscountBase <= 0) {
-              throw new Error('This coupon does not apply to the selected product.');
-            }
-          }
-
-          promoDetailsStr = currentPromoData.type === 'balance' ? `+$${currentPromoData.value} bonus` : `${currentPromoData.value}% discount`;
-          promoUpdate = {
-            uses: uses + 1,
-            usedBy: { ...currentPromoData.usedBy, [user.uid]: userUses + 1 }
-          };
-        }
-
-        const shouldCreditAffiliate = Boolean(affiliateDocRef && affSnap?.exists() && affSnap.id !== user.uid);
-        const affData = shouldCreditAffiliate ? affSnap!.data() as any : null;
-        const earned = shouldCreditAffiliate ? currentTotalAfterDiscount * (affiliateCommissionPercent / 100) : 0;
-
-        if (promoDocRef && promoUpdate) {
-          transaction.update(promoDocRef, promoUpdate);
-        }
-
-        if (affiliateDocRef && shouldCreditAffiliate && affData) {
-          transaction.update(affiliateDocRef, {
-            balance: Number(affData.balance || 0) + earned,
-            affiliateEarnings: Number(affData.affiliateEarnings || 0) + earned
-          });
-          const affHistoryRef = doc(collection(db, 'affiliate_history'));
-          transaction.set(affHistoryRef, {
-            affiliateId: affSnap!.id,
-            referredUserId: user.uid,
-            referredUserEmail: user.email,
-            amount: currentTotalAfterDiscount,
-            earned: earned,
-            date: purchasedAt
-          });
-        }
-
-        if (appliedBalanceToUse > 0 || appliedReviewDiscount) {
-          transaction.update(userRef, {
-            ...(appliedBalanceToUse > 0 ? { balance: currentBalance - appliedBalanceToUse } : {}),
-            ...(appliedReviewDiscount ? { reviewDiscountAvailable: false } : {})
-          });
-        }
-
-        const deliveredItems = keyRefs.map((keyRef, index) => {
-          const key = keysToBuy[index];
-          return {
-            keyId: keyRef.id,
-            keyString: keySnaps[index].data().keyString,
-            productId: key.productId,
-            variantId: key.variantId,
-            productName: key.title,
-            variantName: key.variantName,
-            price: key.price,
-            image: key.image || '',
-            instructions: key.instructions || '',
-            instructionImage: key.instructionImage || null,
-            instructionImages: key.instructionImages || []
-          };
-        });
-
-        keyRefs.forEach((keyRef, index) => {
-          const key = keysToBuy[index];
-          transaction.update(keyRef, {
-            isSold: true,
-            ownerId: user.uid,
-            ownerName: latestProfile.displayName || user.email,
-            ownerPhoto: latestProfile.photoURL || '',
-            purchasedAt,
-            price: key.price,
-            productName: key.title,
-            instructions: key.instructions || '',
-            instructionImage: key.instructionImage || null,
-            instructionImages: key.instructionImages || []
-          });
+        transaction.update(keyRef, {
+          isSold: true,
+          ownerId: user.uid,
+          ownerName: profile.displayName || user.email,
+          ownerPhoto: profile.photoURL || '',
+          purchasedAt,
+          price: plan.price,
+          productName: 'ZXCHUB Key',
+          variantName: plan.name,
+          paymentProvider: metadata?.paymentProvider || paymentMethod
         });
 
         transaction.set(transactionRef, {
           userId: user.uid,
           type: 'purchase',
-          amount: currentTotalAfterDiscount,
-          method:
-            appliedBalanceToUse === currentTotalAfterDiscount
-              ? 'Balance'
-              : metadata?.paymentProvider === 'paypal' || paymentMethod === 'paypal'
-                ? 'PayPal'
-                : 'Credit Card',
-          productTitle: isZxchubKeyCheckout ? 'ZXCHUB Key' : isCartCheckout ? 'Cart Checkout' : product.title,
-          items: deliveredItems,
-          subtotal: currentSubtotal,
-          discountPercent: appliedDiscountPercent,
-          discountAmount: currentDiscountAmount,
-          discountBase: currentDiscountBase,
-          reviewDiscountApplied: appliedReviewDiscount,
-          balanceUsed: appliedBalanceToUse,
-          promoCode: appliedPromoCode || null,
-          promoProductId: metadataPromoProductId || null,
-          promoDetails: promoDetailsStr,
+          amount: plan.price,
+          method: metadata?.paymentProvider === 'paypal' ? 'PayPal' : 'Credit Card',
+          productTitle: 'ZXCHUB Key',
+          planId: plan.id,
+          planName: plan.name,
+          items: [deliveredItem],
+          subtotal: plan.price,
           createdAt: purchasedAt,
           ...(sessionId ? { sessionId } : {})
         });
       });
-
-      if (isCartCheckout) {
-        clearCart();
-      }
-
-      try {
-         await fetch('/api/discord/give-role', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.uid })
-         });
-      } catch (e) {}
 
       fetch('/api/discord/notify', {
         method: 'POST',
@@ -546,31 +128,50 @@ export default function Checkout() {
       navigate(`/order/${transactionRef.id}`);
     } catch (purchaseError: any) {
       console.error(purchaseError);
-      setError(purchaseError.message || 'An error occurred during purchase.');
+      setError(purchaseError.message || 'Failed to complete purchase.');
       setIsProcessing(false);
     }
   };
 
-  const buildPaymentMetadata = () => {
-    const metadata: any = isCartCheckout ? { type: 'cart' } : { productId, variantId, quantity };
-    if (effectiveDiscountPercent > 0) {
-      metadata.discountPercent = effectiveDiscountPercent;
-      if (reviewDiscountPercent > 0 && discountPercent === 0) {
-        metadata.reviewDiscount = 'true';
+  useEffect(() => {
+    const sessionId = params.get('session_id');
+    if (!sessionId || !user || !profile) return;
+
+    const verifySession = async () => {
+      try {
+        const existing = await getDocs(query(collection(db, 'transactions'), where('sessionId', '==', sessionId)));
+        if (!existing.empty) {
+          navigate(`/order/${existing.docs[0].id}`, { replace: true });
+          return;
+        }
+
+        const response = await fetch('/api/payments/verify-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId })
+        });
+        const data = await response.json();
+        if (data.success && data.metadata?.userId === user.uid && data.metadata?.planId === plan.id) {
+          await processOrder(sessionId, data.metadata);
+        }
+      } catch (verifyError: any) {
+        setError(verifyError.message || 'Failed to verify payment.');
       }
-    }
-    if (discountPercent > 0) {
-      metadata.promoCode = promoCode.toUpperCase();
-      if (appliedPromo?.productScope === 'product') {
-        metadata.promoProductId = appliedPromo.productId;
-      }
-    }
-    metadata.affiliateCommissionPercent = discountSettings.affiliateCommissionPercent;
-    return metadata;
-  };
+    };
+
+    verifySession();
+  }, [params, user, profile, plan.id]);
+
+  const buildPaymentMetadata = () => ({
+    type: 'zxchub-key',
+    userId: user?.uid || '',
+    planId: plan.id,
+    planName: plan.name,
+    productTitle: `ZXCHUB Key - ${plan.name}`
+  });
 
   useEffect(() => {
-    if (paymentMethod !== 'paypal' || finalAmount <= 0 || !paypalClientId) {
+    if (paymentMethod !== 'paypal' || !paypalClientId || !user?.uid) {
       setIsPayPalReady(false);
       return;
     }
@@ -585,49 +186,24 @@ export default function Checkout() {
       window.paypal.Buttons({
         style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
         createOrder: async () => {
-          if (!user?.uid) {
-            setError('Please sign in before paying.');
-            throw new Error('User is not signed in.');
-          }
-          setError('');
           const response = await fetch('/api/payments/paypal-create-order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              amount: finalAmount,
-              userId: user.uid,
-              metadata: buildPaymentMetadata()
-            })
+            body: JSON.stringify({ amount: plan.price, userId: user.uid, metadata: buildPaymentMetadata() })
           });
           const data = await response.json();
-          if (!data.id) {
-            throw new Error(data.error || 'Failed to create PayPal order.');
-          }
+          if (!data.id) throw new Error(data.error || 'Failed to create PayPal order.');
           return data.id;
         },
         onApprove: async (data: any) => {
-          setIsProcessing(true);
-          try {
-            const response = await fetch('/api/payments/paypal-capture-order', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orderId: data.orderID })
-            });
-            const capture = await response.json();
-            if (!capture.success) {
-              throw new Error(capture.error || 'PayPal payment was not completed.');
-            }
-            await processOrder(capture.orderId || data.orderID, {
-              ...buildPaymentMetadata(),
-              paymentProvider: 'paypal',
-              paypalOrderId: capture.orderId || data.orderID,
-              paypalPayerEmail: capture.payerEmail || ''
-            });
-          } catch (paypalError: any) {
-            console.error(paypalError);
-            setError(paypalError.message || 'Failed to complete PayPal payment.');
-            setIsProcessing(false);
-          }
+          const response = await fetch('/api/payments/paypal-capture-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: data.orderID })
+          });
+          const capture = await response.json();
+          if (!capture.success) throw new Error(capture.error || 'PayPal payment was not completed.');
+          await processOrder(capture.orderId || data.orderID, { ...buildPaymentMetadata(), paymentProvider: 'paypal' });
         },
         onError: (paypalError: any) => {
           console.error(paypalError);
@@ -663,337 +239,134 @@ export default function Checkout() {
     return () => {
       cancelled = true;
     };
-  }, [paymentMethod, paypalClientId, finalAmount, user?.uid, promoCode, discountPercent, balanceToUse]);
+  }, [paymentMethod, paypalClientId, user?.uid, plan.id, plan.price]);
 
-  const handleProceed = async () => {
-    if (finalAmount === 0) {
-      await processOrder();
+  const handleStripe = async () => {
+    if (!user || !profile) {
+      await login();
       return;
     }
 
-    if (paymentMethod === 'stripe') {
-      setIsProcessing(true);
-      try {
-        const metadata = buildPaymentMetadata();
+    setIsProcessing(true);
+    setError('');
 
-        const res = await fetch('/api/payments/create-checkout-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: finalAmount,
-            method: 'stripe',
-            userId: user.uid,
-            metadata,
-            successUrl:
-              window.location.origin +
-              `/checkout/${isZxchubKeyCheckout ? `key/${zxchubPlan.id}` : isCartCheckout ? 'cart' : `${productId}/${variantId}`}?session_id={CHECKOUT_SESSION_ID}&qty=${quantity}`,
-            cancelUrl:
-              window.location.origin +
-              `/checkout/${isZxchubKeyCheckout ? `key/${zxchubPlan.id}` : isCartCheckout ? 'cart' : `${productId}/${variantId}`}?qty=${quantity}`
-          })
-        });
-        const data = await res.json();
-
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error(data.error || 'Failed to create checkout session');
-        }
-      } catch (paymentError: any) {
-        console.error(paymentError);
-        setError(paymentError.message || 'Failed to initiate payment');
-        setIsProcessing(false);
-      }
-      return;
+    try {
+      const response = await fetch('/api/payments/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: plan.price,
+          method: 'stripe',
+          userId: user.uid,
+          metadata: buildPaymentMetadata(),
+          successUrl: `${window.location.origin}/checkout/key/${plan.id}?method=card&session_id={CHECKOUT_SESSION_ID}`,
+          cancelUrl: `${window.location.origin}/get-key?method=card`
+        })
+      });
+      const data = await response.json();
+      if (!data.url) throw new Error(data.error || 'Failed to create checkout session.');
+      window.location.href = data.url;
+    } catch (stripeError: any) {
+      setError(stripeError.message || 'Failed to start Stripe checkout.');
+      setIsProcessing(false);
     }
-
-    setError('Use the PayPal button to complete payment.');
   };
 
-  if (!isCartCheckout && !isZxchubKeyCheckout && (!product || !variant)) {
-    return <div className="min-h-screen flex items-center justify-center text-white">Loading...</div>;
-  }
-
-  return (
-    <div className="w-full">
-      <SEO title="Checkout | ZXCHUB" description="Complete your secure purchase on ZXCHUB." />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-32">
-        <div className="flex flex-col lg:flex-row gap-12">
-          <div className="w-full lg:w-1/3">
-            <Link to="/" className="flex items-center gap-3 mb-8 hover:opacity-80 transition-opacity">
-              <img src="/logo.png" alt="ZXCHUB" className="w-8 h-8 object-contain" />
-              <BrandName className="text-xl" />
-            </Link>
-
-            <div className="mb-2 text-sm text-zinc-400">
-              Pay <BrandName className="text-sm" />
-            </div>
-            <div className="text-4xl font-bold text-white mb-8">${finalAmount.toFixed(2)}</div>
-
-            {isCartCheckout ? (
-              <div className="space-y-4 mb-6">
-                {cart.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-[#1A1D24] rounded-xl p-4 border border-zinc-800/50 flex gap-4 items-center"
-                  >
-                    {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.title}
-                        className="w-16 h-16 rounded-lg object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 bg-zinc-800 rounded-lg flex items-center justify-center">
-                        <Gamepad2 className="w-8 h-8 text-zinc-600" />
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <div className="font-bold text-white">{item.title}</div>
-                      <div className="text-sm text-zinc-400">{item.variantName}</div>
-                      <div className="text-xs text-zinc-500">{item.quantity}x</div>
-                    </div>
-                    <div className="font-bold text-white">${(item.price * item.quantity).toFixed(2)}</div>
-                  </div>
-                ))}
-              </div>
-            ) : isZxchubKeyCheckout ? (
-              <div className="bg-[#1A1D24] rounded-xl p-4 border border-zinc-800/50 mb-6 flex gap-4 items-center">
-                <img src="/logo.png" alt="ZXCHUB Key" className="w-16 h-16 rounded-lg object-contain bg-zinc-900 p-2" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-1 font-bold">
-                    <BrandName className="text-base" />
-                    <span className="text-white">Key</span>
-                  </div>
-                  <div className="text-sm text-zinc-400">{zxchubPlan.name}</div>
-                  <div className="text-xs text-zinc-500">{quantity}x</div>
-                </div>
-                <div className="font-bold text-white">${subtotal.toFixed(2)}</div>
-              </div>
-            ) : (
-              <div className="bg-[#1A1D24] rounded-xl p-4 border border-zinc-800/50 mb-6 flex gap-4 items-center">
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    className="w-16 h-16 rounded-lg object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-zinc-800 rounded-lg flex items-center justify-center">
-                    <Gamepad2 className="w-8 h-8 text-zinc-600" />
-                  </div>
-                )}
-                <div className="flex-1">
-                  <div className="font-bold text-white">{product.title}</div>
-                  <div className="text-sm text-zinc-400">{variant.name}</div>
-                  <div className="text-xs text-zinc-500">{quantity}x</div>
-                </div>
-                <div className="font-bold text-white">${subtotal.toFixed(2)}</div>
-              </div>
-            )}
-
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between text-zinc-400">
-                <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-              {effectiveDiscountPercent > 0 && (
-                <div className="flex justify-between text-green-400">
-                  <span>{reviewDiscountPercent > 0 && discountPercent === 0 ? 'Review Reward' : 'Discount'} ({effectiveDiscountPercent}%)</span>
-                  <span>-${discountAmount.toFixed(2)}</span>
-                </div>
-              )}
-              {balanceToUse > 0 && (
-                <div className="flex justify-between text-indigo-400">
-                  <span>Balance Used</span>
-                  <span>-${balanceToUse.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-white font-bold pt-3 border-t border-zinc-800/50">
-                <span>Total</span>
-                <span>${finalAmount.toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="mt-12 pt-8 border-t border-zinc-800/50">
-              <div className="text-sm font-bold text-white mb-2">Having issues with your order?</div>
-              <div className="text-xs text-zinc-400 mb-4">
-                You can open a ticket on your Customer Dashboard to receive assistance from our support team.
-              </div>
-              <button
-                onClick={() => navigate('/profile?tab=tickets')}
-                className="border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 px-4 py-2 rounded-lg text-xs font-medium transition-colors mb-8 flex items-center gap-2"
-              >
-                <Ticket className="w-4 h-4" /> Open a Support Ticket
-              </button>
-
-              <div className="flex gap-4 text-xs text-zinc-500">
-                <a href="/refund-policy" target="_blank" className="hover:text-zinc-300 transition-colors">
-                  Refund Policy
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full lg:w-2/3">
-            <div className="flex items-center gap-8 border-b border-zinc-800/50 pb-4 mb-8">
-              <div className="text-indigo-400 font-medium border-b-2 border-indigo-500 pb-4 -mb-[18px]">
-                <div className="text-xs text-indigo-400/70">Step 1</div>
-                Order Information
-              </div>
-              <div className="text-zinc-500 font-medium">
-                <div className="text-xs text-zinc-600">Step 2</div>
-                Confirm & Pay
-              </div>
-              <div className="text-zinc-500 font-medium">
-                <div className="text-xs text-zinc-600">Step 3</div>
-                Receive Your Items
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Coupon Code</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={promoCode}
-                    onChange={e => {
-                      setPromoCode(e.target.value);
-                      setDiscountPercent(0);
-                      setAppliedPromo(null);
-                      setPromoSuccess('');
-                      setPromoError('');
-                    }}
-                    placeholder="Have a coupon code? Enter it here."
-                    className="flex-1 bg-[#1A1D24] border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
-                  <button
-                    onClick={() => handleApplyPromo()}
-                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Apply &rarr;
-                  </button>
-                </div>
-                {promoError && <div className="text-red-400 text-xs mt-2">{promoError}</div>}
-                {promoSuccess && <div className="text-green-400 text-xs mt-2">{promoSuccess}</div>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Payment Method *</label>
-
-                <div className="space-y-3">
-                  {(!paymentSettings || paymentSettings?.stripe?.enabled) && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('stripe')}
-                    className={`flex w-full items-center justify-between p-4 rounded-xl border text-left transition-colors ${
-                      paymentMethod === 'stripe'
-                        ? 'bg-[#22252D] border-red-500'
-                        : 'bg-[#1A1D24] border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full border-4 bg-zinc-900 ${paymentMethod === 'stripe' ? 'border-red-600' : 'border-zinc-600'}`}></div>
-                      <div>
-                        <div className="font-medium text-white">Debit Card / Credit Card / Google Pay / Apple Pay</div>
-                        <div className="text-xs text-zinc-500">Powered by Stripe</div>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <CreditCard className="w-5 h-5 text-zinc-400" />
-                    </div>
-                  </button>
-                  )}
-
-                  {paymentSettings?.paypal?.enabled && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('paypal')}
-                    className={`flex w-full items-center justify-between p-4 rounded-xl border text-left transition-colors ${
-                      paymentMethod === 'paypal'
-                        ? 'bg-[#22252D] border-red-500'
-                        : 'bg-[#1A1D24] border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-4 h-4 rounded-full border-4 bg-zinc-900 ${paymentMethod === 'paypal' ? 'border-red-600' : 'border-zinc-600'}`}></div>
-                      <div>
-                        <div className="font-medium text-white">PayPal</div>
-                        <div className="text-xs text-zinc-500">PayPal balance, card, or supported wallet</div>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <CreditCard className="w-5 h-5 text-zinc-400" />
-                    </div>
-                  </button>
-                  )}
-                  
-                  {paymentSettings && !paymentSettings?.stripe?.enabled && !paymentSettings?.paypal?.enabled && (
-                    <div className="text-red-400 text-sm">No payment methods available right now.</div>
-                  )}
-                </div>
-              </div>
-
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-sm">{error}</div>
-              )}
-
-              {profile && !profile.discordId ? (
-                <button
-                  onClick={() => {
-                     window.open(`/api/discord/auth-url?uid=${user?.uid}`, '_blank', 'width=500,height=600');
-                     window.addEventListener('message', async (e) => {
-                        if (e.data?.type === 'discord_auth_success') {
-                           if (user) {
-                             try {
-                               await updateDoc(doc(db, 'users', user.uid), e.data.data);
-                               window.location.reload();
-                             } catch (err) {
-                               console.error(err);
-                             }
-                           }
-                        }
-                     });
-                  }}
-                  className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white px-4 py-4 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Gamepad2 className="w-4 h-4" />
-                  Link Discord to Continue
-                </button>
-              ) : paymentMethod === 'paypal' && finalAmount > 0 ? (
-                <div className="space-y-3">
-                  {!paypalClientId && (
-                    <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
-                      PayPal is enabled but the Client ID is missing.
-                    </div>
-                  )}
-                  <div id="paypal-buttons" className="min-h-[120px]" />
-                  {paypalClientId && !isPayPalReady && (
-                    <div className="text-center text-sm text-zinc-500">Loading PayPal...</div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={handleProceed}
-                  disabled={isProcessing}
-                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-4 py-4 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? (
-                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      Proceed to Payment <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
+  if (!loading && (!user || !profile)) {
+    return (
+      <div className="min-h-screen bg-[#050507] px-4 py-28 text-white">
+        <SEO title="Sign In | ZXCHUB" description="Sign in to buy a ZXCHUB key." />
+        <div className="mx-auto max-w-lg border border-white/10 bg-[#09090d] p-8 text-center">
+          <KeyRound className="mx-auto mb-5 h-10 w-10 text-red-500" />
+          <h1 className="text-3xl font-black">Sign In Required</h1>
+          <p className="mt-3 text-zinc-400">Sign in before purchasing so the key can be delivered to My Purchases.</p>
+          <button onClick={login} className="mt-7 bg-red-600 px-6 py-3 text-sm font-black uppercase text-white hover:bg-red-500">Sign In</button>
         </div>
       </div>
+    );
+  }
+
+  if (!isPaidPlan) return <Navigate to="/get-key?method=card" replace />;
+
+  return (
+    <div className="min-h-screen bg-[#050507] text-white">
+      <SEO title="Checkout | ZXCHUB" description="Complete your ZXCHUB key purchase." />
+      <main className="mx-auto grid min-h-screen max-w-6xl gap-10 px-4 py-12 pt-28 lg:grid-cols-[.82fr_1.18fr] lg:items-start">
+        <aside className="lg:sticky lg:top-24">
+          <Link to="/" className="mb-8 flex items-center gap-3">
+            <img src="/logo.png" alt="ZXCHUB" className="h-9 w-9 object-contain" />
+            <BrandName className="text-xl" />
+          </Link>
+
+          <div className="border border-white/10 bg-[#09090d] p-6">
+            <div className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-red-400">Secure Access</div>
+            <h1 className="text-4xl font-black">ZXCHUB Key</h1>
+            <div className="mt-2 text-zinc-400">{plan.name}</div>
+            <div className="mt-8 text-5xl font-black">${plan.price.toFixed(2)}</div>
+
+            <div className="mt-8 space-y-3 border-t border-white/10 pt-6 text-sm text-zinc-300">
+              <div className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-red-400" /> Works with every published ZXCHUB script</div>
+              <div className="flex items-center gap-3"><KeyRound className="h-4 w-4 text-red-400" /> One unused key is reserved and delivered after payment</div>
+              <div className="flex items-center gap-3"><Ticket className="h-4 w-4 text-red-400" /> Support through discord.gg/zxchub</div>
+            </div>
+          </div>
+        </aside>
+
+        <section className="border border-white/10 bg-[#08080b] p-6 sm:p-8">
+          <div className="mb-8">
+            <div className="text-sm font-bold text-zinc-500">Total</div>
+            <div className="mt-1 text-3xl font-black">${plan.price.toFixed(2)}</div>
+          </div>
+
+          <div className="mb-8 grid gap-3">
+            {(!paymentSettings || paymentSettings?.stripe?.enabled) && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('stripe')}
+                className={`flex items-center justify-between border p-5 text-left transition ${paymentMethod === 'stripe' ? 'border-red-500 bg-red-500/10' : 'border-white/10 bg-black hover:border-white/25'}`}
+              >
+                <span>
+                  <span className="block font-black">Bank Card / Google Pay / Apple Pay</span>
+                  <span className="mt-1 block text-sm text-zinc-500">Powered by Stripe Checkout</span>
+                </span>
+                <CreditCard className="h-5 w-5 text-zinc-400" />
+              </button>
+            )}
+
+            {paymentSettings?.paypal?.enabled && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('paypal')}
+                className={`flex items-center justify-between border p-5 text-left transition ${paymentMethod === 'paypal' ? 'border-red-500 bg-red-500/10' : 'border-white/10 bg-black hover:border-white/25'}`}
+              >
+                <span>
+                  <span className="block font-black">PayPal</span>
+                  <span className="mt-1 block text-sm text-zinc-500">PayPal wallet or card through PayPal</span>
+                </span>
+                <CreditCard className="h-5 w-5 text-zinc-400" />
+              </button>
+            )}
+          </div>
+
+          {error && <div className="mb-6 border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
+
+          {paymentMethod === 'paypal' ? (
+            <div>
+              {!paypalClientId && <div className="border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">PayPal is enabled but Client ID is missing.</div>}
+              <div id="paypal-buttons" className="min-h-32" />
+              {paypalClientId && !isPayPalReady && <div className="text-center text-sm text-zinc-500">Loading PayPal...</div>}
+            </div>
+          ) : (
+            <button
+              onClick={handleStripe}
+              disabled={isProcessing}
+              className="flex min-h-14 w-full items-center justify-center gap-2 bg-red-600 px-6 text-sm font-black uppercase tracking-wide text-white transition hover:bg-red-500 disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing...' : <>Proceed to Payment <ArrowRight className="h-4 w-4" /></>}
+            </button>
+          )}
+        </section>
+      </main>
     </div>
   );
 }

@@ -109,7 +109,7 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
             price_data: {
               currency: 'usd',
               product_data: {
-                name: metadata.type === 'topup' ? 'Balance Top Up' : (metadata.productTitle || 'Order Checkout'),
+                name: metadata?.productTitle || metadata?.planName || 'ZXCHUB Key',
               },
               unit_amount: Math.max(50, Math.round(amount * 100)),
             },
@@ -186,7 +186,7 @@ app.post('/api/payments/paypal-create-order', async (req, res) => {
       body: JSON.stringify({
         intent: 'CAPTURE',
         purchase_units: [{
-          reference_id: metadata?.type === 'topup' ? 'zxchub-balance-topup' : 'zxchub-key-order',
+          reference_id: metadata?.planId ? `zxchub-key-${metadata.planId}` : 'zxchub-key-order',
           custom_id: userId,
           amount: { currency_code: 'USD', value: numericAmount.toFixed(2) }
         }]

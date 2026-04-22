@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         intent: 'CAPTURE',
         purchase_units: [
           {
-            reference_id: metadata?.type === 'topup' ? 'zxchub-balance-topup' : 'zxchub-key-order',
+            reference_id: metadata?.planId ? `zxchub-key-${metadata.planId}` : 'zxchub-key-order',
             custom_id: userId,
             amount: {
               currency_code: 'USD',

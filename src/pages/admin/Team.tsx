@@ -163,7 +163,7 @@ export default function AdminTeam() {
                 name="role"
                 className="w-full bg-[#0f172a] border border-[#222b3d] rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               >
-                <option value="support">Support (Tickets & Feedback only)</option>
+                <option value="support">Support (Tickets only)</option>
                 <option value="admin">Admin (Full Access)</option>
               </select>
             </div>
@@ -176,8 +176,8 @@ export default function AdminTeam() {
           </form>
           
           <div className="mt-6 pt-6 border-t border-[#222b3d] text-sm text-slate-400 space-y-2">
-            <p><strong>Admin:</strong> Has full access to all settings, products, and orders.</p>
-            <p><strong>Support:</strong> Can only access the Feedbacks and Tickets sections to help customers.</p>
+            <p><strong>Admin:</strong> Has full access to all settings, scripts, and orders.</p>
+            <p><strong>Support:</strong> Can only access the Tickets section to help customers.</p>
           </div>
         </div>
       </div>
