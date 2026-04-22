@@ -19,6 +19,10 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator'
       );
     }
+
+    function isEditableScript(data) {
+      return data.type == 'script' || data.slug != 'zxchub-key';
+    }
     
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -30,10 +34,17 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if true;
-      allow create: if isAdmin() || (isModerator() && request.resource.data.type == 'script');
-      allow delete: if isAdmin() || (isModerator() && resource.data.type == 'script');
+      allow create: if isAdmin() || (
+        isModerator() &&
+        request.resource.data.type == 'script' &&
+        request.resource.data.slug != 'zxchub-key'
+      );
+      allow delete: if isAdmin() || (isModerator() && isEditableScript(resource.data));
       allow update: if isAdmin() || (
-        isModerator() && resource.data.type == 'script' && request.resource.data.type == 'script'
+        isModerator() &&
+        isEditableScript(resource.data) &&
+        request.resource.data.type == 'script' &&
+        request.resource.data.slug != 'zxchub-key'
       ) || (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
       ) || (
