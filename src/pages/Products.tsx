@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
-import { Eye, Heart, Search, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, Eye, Film, Flame, Heart, RotateCcw, Search, SlidersHorizontal, Trophy } from 'lucide-react';
 import { db } from '../firebase';
 import Navbar from '../components/Navbar';
 import SEO from '../components/SEO';
 import BrandName from '../components/BrandName';
 
 type FilterMode = 'all' | 'free' | 'premium';
+type SortMode = 'popular' | 'newest' | 'liked';
 const NEW_SCRIPT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
 const isNewScript = (script: any) => {
@@ -15,11 +16,22 @@ const isNewScript = (script: any) => {
   return createdAt > 0 && Date.now() - createdAt < NEW_SCRIPT_WINDOW_MS;
 };
 
+const normalize = (value: string) => value.toLowerCase().trim();
+
+const extractGameId = (value?: string) => {
+  if (!value) return '';
+  const match = value.match(/games\/(\d+)/i) || value.match(/^(\d+)$/);
+  return match?.[1] || '';
+};
+
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [gameQuery, setGameQuery] = useState('');
   const [mode, setMode] = useState<FilterMode>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('popular');
+  const [hasVideoOnly, setHasVideoOnly] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,12 +47,35 @@ export default function Products() {
     fetchData();
   }, []);
 
-  const filteredProducts = useMemo(() => products
+  const scripts = useMemo(() => products.filter(product => {
+    if (product.slug === 'zxchub-key') return false;
+    if ((product.visibility || 'public') !== 'public') return false;
+    return true;
+  }), [products]);
+
+  const stats = useMemo(() => ({
+    total: scripts.length,
+    newCount: scripts.filter(isNewScript).length,
+    videoCount: scripts.filter(script => Boolean(script.videoUrl)).length
+  }), [scripts]);
+
+  const filteredProducts = useMemo(() => scripts
     .filter(product => {
       if (product.slug === 'zxchub-key') return false;
       if ((product.visibility || 'public') !== 'public') return false;
-      const searchText = `${product.title || ''} ${product.description || ''}`.toLowerCase();
-      if (keyword && !searchText.includes(keyword.toLowerCase())) return false;
+      const searchText = normalize(`${product.title || ''} ${product.description || ''} ${product.gameLink || ''}`);
+      if (keyword && !searchText.includes(normalize(keyword))) return false;
+
+      if (gameQuery) {
+        const wanted = normalize(gameQuery);
+        const wantedGameId = extractGameId(wanted);
+        const productGameLink = normalize(product.gameLink || product.placeId || '');
+        const productGameId = extractGameId(productGameLink);
+        const matchesGameId = wantedGameId && productGameId && wantedGameId === productGameId;
+        if (!matchesGameId && !productGameLink.includes(wanted)) return false;
+      }
+
+      if (hasVideoOnly && !product.videoUrl) return false;
 
       if (mode === 'free') return !product.isPaid;
       if (mode === 'premium') return Boolean(product.isPaid);
@@ -51,8 +86,21 @@ export default function Products() {
       const bNew = isNewScript(b);
       if (aNew !== bNew) return aNew ? -1 : 1;
       if (aNew && bNew) return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+
+      if (sortMode === 'newest') return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+      if (sortMode === 'liked') return Number(b.likes || 0) - Number(a.likes || 0);
       return Number(b.views || 0) - Number(a.views || 0);
-    }), [products, keyword, mode]);
+    }), [scripts, keyword, gameQuery, hasVideoOnly, mode, sortMode]);
+
+  const hasActiveFilters = Boolean(keyword || gameQuery || hasVideoOnly || mode !== 'all' || sortMode !== 'popular');
+
+  const resetFilters = () => {
+    setKeyword('');
+    setGameQuery('');
+    setMode('all');
+    setSortMode('popular');
+    setHasVideoOnly(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#050507] text-white">
@@ -77,34 +125,110 @@ export default function Products() {
           </div>
         </section>
 
-        <div className="mb-10 grid gap-4 lg:grid-cols-[1fr_auto]">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search scripts by name or description..."
-              value={keyword}
-              onChange={event => setKeyword(event.target.value)}
-              className="h-14 w-full border border-white/10 bg-black pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500/70"
-            />
-          </label>
+        <div className="mb-8 border border-white/10 bg-[#08080b] p-4 sm:p-5">
+          <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search by script name, feature, or description..."
+                value={keyword}
+                onChange={event => setKeyword(event.target.value)}
+                className="h-14 w-full border border-white/10 bg-black pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500/70"
+              />
+            </label>
 
-          <div className="grid grid-cols-3 overflow-hidden border border-white/10 bg-black">
-            {[
-              ['all', 'All'],
-              ['free', 'Free'],
-              ['premium', 'Premium']
-            ].map(([value, label]) => (
+            <label className="relative block">
+              <Trophy className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Game link or Place ID"
+                value={gameQuery}
+                onChange={event => setGameQuery(event.target.value)}
+                className="h-14 w-full border border-white/10 bg-black pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-red-500/70"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[auto_auto_1fr_auto]">
+            <div className="grid grid-cols-3 overflow-hidden border border-white/10 bg-black">
+              {[
+                ['all', 'All'],
+                ['free', 'Free'],
+                ['premium', 'Premium']
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setMode(value as FilterMode)}
+                  className={`h-12 min-w-24 px-4 text-xs font-black uppercase tracking-wide transition ${
+                    mode === value ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 overflow-hidden border border-white/10 bg-black">
+              {[
+                ['popular', 'Popular', Flame],
+                ['newest', 'New', CalendarDays],
+                ['liked', 'Liked', Heart]
+              ].map(([value, label, Icon]) => {
+                const SortIcon = Icon as React.ElementType;
+                return (
+                  <button
+                    key={value as string}
+                    onClick={() => setSortMode(value as SortMode)}
+                    className={`flex h-12 min-w-24 items-center justify-center gap-2 px-4 text-xs font-black uppercase tracking-wide transition ${
+                      sortMode === value ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <SortIcon className="h-4 w-4" />
+                    {label as string}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                key={value}
-                onClick={() => setMode(value as FilterMode)}
-                className={`h-14 min-w-28 px-5 text-sm font-black uppercase tracking-wide transition ${
-                  mode === value ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                type="button"
+                onClick={() => setHasVideoOnly(value => !value)}
+                className={`inline-flex h-12 items-center gap-2 border px-4 text-xs font-black uppercase tracking-wide transition ${
+                  hasVideoOnly
+                    ? 'border-red-500 bg-red-500/10 text-red-300'
+                    : 'border-white/10 bg-black text-zinc-400 hover:border-white/25 hover:text-white'
                 }`}
               >
-                {label}
+                <Film className="h-4 w-4" />
+                Has Video
               </button>
-            ))}
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex h-12 items-center gap-2 border border-white/10 bg-black px-4 text-xs font-black uppercase tracking-wide text-zinc-400 transition hover:border-white/25 hover:text-white"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-start border border-white/10 bg-black px-4 text-sm font-bold text-zinc-400 xl:justify-end">
+              <span className="text-white">{filteredProducts.length}</span>
+              <span className="mx-1">/</span>
+              <span>{stats.total}</span>
+              <span className="ml-2">scripts</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-wide">
+            <span className="border border-white/10 bg-black px-3 py-2 text-zinc-500">{stats.newCount} new scripts</span>
+            <span className="border border-white/10 bg-black px-3 py-2 text-zinc-500">{stats.videoCount} with video</span>
+            <span className="border border-white/10 bg-black px-3 py-2 text-zinc-500">New scripts stay pinned for 3 days</span>
           </div>
         </div>
 

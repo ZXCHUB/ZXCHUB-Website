@@ -10,6 +10,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const ProductPage = lazy(() => import('./pages/ProductPage'));
 const Products = lazy(() => import('./pages/Products'));
 const GetKey = lazy(() => import('./pages/GetKey'));
+const VotePage = lazy(() => import('./pages/VotePage'));
 const RefundPolicy = lazy(() => import('./pages/RefundPolicy'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const OrderComplete = lazy(() => import('./pages/OrderComplete'));
@@ -26,6 +27,7 @@ const AdminPayments = lazy(() => import('./pages/admin/Payments'));
 const AdminTeam = lazy(() => import('./pages/admin/Team'));
 const AdminAnnouncements = lazy(() => import('./pages/admin/Announcements'));
 const AdminThemes = lazy(() => import('./pages/admin/Themes'));
+const AdminVotes = lazy(() => import('./pages/admin/Votes'));
 
 function PageviewTracker() {
   const location = useLocation();
@@ -78,6 +80,7 @@ export default function App() {
             <Route path="/scripts" element={<Products />} />
             <Route path="/products" element={<NavigateTo to="/scripts" />} />
             <Route path="/get-key" element={<GetKey />} />
+            <Route path="/vote/:slug" element={<VotePage />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/script/:slug" element={<ProductPage />} />
             <Route path="/product/:slug" element={<LegacyScriptRedirect />} />
@@ -97,6 +100,7 @@ export default function App() {
               <Route path="settings/team" element={<AdminTeam />} />
               <Route path="settings/announcements" element={<AdminAnnouncements />} />
               <Route path="settings/themes" element={<AdminThemes />} />
+              <Route path="settings/votes" element={<AdminVotes />} />
               <Route path="*" element={<AdminNotFound />} />
             </Route>
           </Routes>

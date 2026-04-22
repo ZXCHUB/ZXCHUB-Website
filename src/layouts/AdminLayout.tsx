@@ -5,7 +5,7 @@ import BrandName from '../components/BrandName';
 import {
   Home, Code2, ListOrdered, Receipt, Users, Ticket,
   Settings, CreditCard, UsersRound, User,
-  ChevronDown, ChevronRight, KeyRound, Megaphone, Palette
+  ChevronDown, ChevronRight, KeyRound, Megaphone, Palette, Vote
 } from 'lucide-react';
 
 interface NavItemProps {
@@ -158,6 +158,7 @@ export default function AdminLayout() {
                   { label: 'Team', to: '/admin/settings/team', icon: UsersRound },
                   { label: 'Announcements', to: '/admin/settings/announcements', icon: Megaphone },
                   { label: 'Themes', to: '/admin/settings/themes', icon: Palette },
+                  { label: 'Votes', to: '/admin/settings/votes', icon: Vote },
                 ]}
               />
               <NavItem icon={User} label="Account" to="/profile" isActive={false} accent={panelAccent} />

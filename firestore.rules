@@ -140,6 +140,26 @@ service cloud.firestore {
       allow create: if isAdmin() || isModerator();
       allow update, delete: if false;
     }
+    match /polls/{pollId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voteCounts', 'totalVotes', 'lastVoteAt']) &&
+        request.resource.data.totalVotes == resource.data.totalVotes + 1
+      );
+
+      match /votes/{userId} {
+        allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
+        allow create: if isAuthenticated() &&
+          request.auth.uid == userId &&
+          request.resource.data.userId == request.auth.uid &&
+          !exists(/databases/$(database)/documents/polls/$(pollId)/votes/$(userId)) &&
+          get(/databases/$(database)/documents/polls/$(pollId)).data.status == 'active' &&
+          get(/databases/$(database)/documents/polls/$(pollId)).data.endsAt > request.time.toMillis();
+        allow update, delete: if false;
+      }
+    }
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();
