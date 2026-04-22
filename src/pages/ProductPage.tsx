@@ -15,7 +15,22 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
-import { ArrowLeft, Copy, ExternalLink, Eye, Heart, MessageCircle, Send, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Copy,
+  Download,
+  Eye,
+  Gamepad2,
+  Link as LinkIcon,
+  MessageCircle,
+  Send,
+  Share2,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2
+} from 'lucide-react';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import Navbar from '../components/Navbar';
@@ -45,22 +60,31 @@ const getYouTubeEmbedUrl = (url?: string) => {
   }
 };
 
-const isModerator = (role?: string) => role === 'admin' || role === 'moderator' || role === 'support';
+const canModerateComments = (role?: string) => role === 'admin' || role === 'moderator';
+
+const getScriptStats = (code?: string) => {
+  const text = code || '';
+  return {
+    lines: text ? text.split(/\r\n|\r|\n/).length : 0,
+    bytes: new Blob([text]).size
+  };
+};
 
 export default function ProductPage() {
   const { slug } = useParams();
   const { user, profile, login } = useAuth();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('description');
   const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
   const [commentText, setCommentText] = useState('');
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [copiedCode, setCopiedCode] = useState(false);
+  const [shared, setShared] = useState(false);
   const [busyCommentId, setBusyCommentId] = useState('');
 
-  const canModerate = isModerator(profile?.role);
+  const canModerate = canModerateComments(profile?.role);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -113,34 +137,59 @@ export default function ProductPage() {
   useEffect(() => {
     if (!product?.id || !user?.uid) {
       setLiked(false);
+      setDisliked(false);
       return;
     }
 
-    getDoc(doc(db, 'products', product.id, 'likes', user.uid))
-      .then(snap => setLiked(snap.exists()))
-      .catch(() => setLiked(false));
+    Promise.all([
+      getDoc(doc(db, 'products', product.id, 'likes', user.uid)),
+      getDoc(doc(db, 'products', product.id, 'dislikes', user.uid))
+    ]).then(([likeSnap, dislikeSnap]) => {
+      setLiked(likeSnap.exists());
+      setDisliked(dislikeSnap.exists());
+    }).catch(() => {
+      setLiked(false);
+      setDisliked(false);
+    });
   }, [product?.id, user?.uid]);
 
-  const handleLike = async () => {
+  const handleScriptReaction = async (type: 'like' | 'dislike') => {
     if (!user) {
       await login();
       return;
     }
     if (!product?.id) return;
 
-    const likeRef = doc(db, 'products', product.id, 'likes', user.uid);
     const productRef = doc(db, 'products', product.id);
-    if (liked) {
-      await deleteDoc(likeRef);
-      await updateDoc(productRef, { likes: increment(-1) });
-      setLiked(false);
-      setProduct((current: any) => ({ ...current, likes: Math.max(0, Number(current.likes || 0) - 1) }));
-    } else {
-      await setDoc(likeRef, { userId: user.uid, createdAt: Date.now() });
-      await updateDoc(productRef, { likes: increment(1) });
-      setLiked(true);
-      setProduct((current: any) => ({ ...current, likes: Number(current.likes || 0) + 1 }));
+    const likeRef = doc(db, 'products', product.id, 'likes', user.uid);
+    const dislikeRef = doc(db, 'products', product.id, 'dislikes', user.uid);
+    const active = type === 'like' ? liked : disliked;
+    const opposite = type === 'like' ? disliked : liked;
+
+    if (active) {
+      await deleteDoc(type === 'like' ? likeRef : dislikeRef);
+      await updateDoc(productRef, { [type === 'like' ? 'likes' : 'dislikes']: increment(-1) });
+      if (type === 'like') setLiked(false);
+      else setDisliked(false);
+      setProduct((current: any) => ({ ...current, [type === 'like' ? 'likes' : 'dislikes']: Math.max(0, Number(current[type === 'like' ? 'likes' : 'dislikes'] || 0) - 1) }));
+      return;
     }
+
+    await setDoc(type === 'like' ? likeRef : dislikeRef, { userId: user.uid, createdAt: Date.now() });
+    if (opposite) {
+      await deleteDoc(type === 'like' ? dislikeRef : likeRef);
+    }
+    await updateDoc(productRef, {
+      [type === 'like' ? 'likes' : 'dislikes']: increment(1),
+      ...(opposite ? { [type === 'like' ? 'dislikes' : 'likes']: increment(-1) } : {})
+    });
+    setLiked(type === 'like');
+    setDisliked(type === 'dislike');
+    setProduct((current: any) => ({
+      ...current,
+      [type === 'like' ? 'likes' : 'dislikes']: Number(current[type === 'like' ? 'likes' : 'dislikes'] || 0) + 1,
+      ...(opposite ? { [type === 'like' ? 'dislikes' : 'likes']: Math.max(0, Number(current[type === 'like' ? 'dislikes' : 'likes'] || 0) - 1) } : {})
+    }));
   };
 
   const buildComment = (text: string) => ({
@@ -248,6 +297,37 @@ export default function ProductPage() {
     }
   };
 
+  const handleShare = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: product?.title || 'ZXCHUB Script', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+      }
+      setShared(true);
+      setTimeout(() => setShared(false), 1800);
+    } catch {
+      await navigator.clipboard.writeText(url);
+      setShared(true);
+      setTimeout(() => setShared(false), 1800);
+    }
+  };
+
+  const downloadScript = () => {
+    if (!product?.scriptCode) return;
+    const blob = new Blob([product.scriptCode], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${product.slug || product.id || 'zxchub-script'}.lua`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const scriptStats = useMemo(() => getScriptStats(product?.scriptCode), [product?.scriptCode]);
+  const embedUrl = getYouTubeEmbedUrl(product?.videoUrl);
+
   if (loading) return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Loading...</div>;
   if (!product) return <div className="min-h-screen bg-[#050507] flex items-center justify-center text-zinc-500">Script not found</div>;
   if (product.visibility === 'private' && profile?.role !== 'admin') {
@@ -255,8 +335,6 @@ export default function ProductPage() {
   }
 
   const customTabs = getCustomTabs(product);
-  const activeCustomTab = customTabs.find((tab: any) => activeTab === `custom-${tab.id}`);
-  const embedUrl = getYouTubeEmbedUrl(product.videoUrl);
 
   return (
     <div className="min-h-screen bg-[#050507] pb-20 text-white">
@@ -268,130 +346,146 @@ export default function ProductPage() {
       <Navbar />
 
       <main className="mx-auto max-w-7xl px-4 py-8 pt-28 sm:px-6 sm:pt-32 lg:px-8">
-        <div className="mb-6">
-          <Link to="/scripts" className="inline-flex items-center gap-2 text-zinc-400 transition-colors hover:text-white">
-            <ArrowLeft className="h-4 w-4" /> Back to Scripts
-          </Link>
-        </div>
+        <Link to="/scripts" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-zinc-400 transition-colors hover:text-white">
+          <ArrowLeft className="h-4 w-4" /> Back to Scripts
+        </Link>
 
-        <section className="grid gap-8 lg:grid-cols-[1.28fr_.72fr] lg:items-start">
-          <div>
-            <div className="overflow-hidden border border-white/10 bg-zinc-950">
-              {embedUrl ? (
-                <iframe
-                  src={embedUrl}
-                  title={product.title}
-                  className="aspect-video w-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : product.image ? (
-                <img src={product.image} alt={product.title} className="aspect-video w-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="aspect-video bg-zinc-900" />
-              )}
+        <section className="overflow-hidden border border-white/10 bg-[#0a0607] shadow-[0_28px_90px_rgba(0,0,0,.35)]">
+          <div className="grid gap-0 lg:grid-cols-[1.35fr_1fr]">
+            <div className="p-5 sm:p-7">
+              <div className="mb-5 flex items-start gap-4">
+                {product.image ? (
+                  <img src={product.image} alt="" className="h-16 w-16 shrink-0 object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="h-16 w-16 shrink-0 bg-red-600" />
+                )}
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl">Script - {product.title}</h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                    <BrandName className="text-sm" />
+                    <span className="text-zinc-600">-</span>
+                    <span className="text-zinc-500">{product.createdAt ? new Date(product.createdAt).toLocaleDateString() : 'Published'}</span>
+                    <button onClick={handleShare} className="inline-flex items-center gap-1 text-zinc-400 transition hover:text-white">
+                      {shared ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
+                      {shared ? 'Copied' : 'Share'}
+                    </button>
+                  </div>
+                </div>
+                <div className="ml-auto hidden items-center gap-2 border border-white/10 bg-black/35 px-4 py-2 text-sm font-black text-zinc-300 sm:flex">
+                  <Eye className="h-4 w-4 text-red-500" /> {Number(product.views || 0)} views
+                </div>
+              </div>
+
+              <div className="overflow-hidden border border-white/10 bg-black">
+                {embedUrl ? (
+                  <iframe
+                    src={embedUrl}
+                    title={product.title}
+                    className="aspect-video w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : product.image ? (
+                  <img src={product.image} alt={product.title} className="aspect-video w-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="aspect-video bg-zinc-900" />
+                )}
+              </div>
             </div>
 
-            <div className="mt-6 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap">
-              <button
-                onClick={() => setActiveTab('description')}
-                className={`shrink-0 border px-5 py-2 text-sm font-bold transition-colors ${activeTab === 'description' ? 'border-red-500 bg-red-500/10 text-white' : 'border-transparent text-zinc-400 hover:text-white'}`}
-              >
-                Description
-              </button>
-              {customTabs.map((tab: any) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(`custom-${tab.id}`)}
-                  className={`shrink-0 border px-5 py-2 text-sm font-bold transition-colors ${activeTab === `custom-${tab.id}` ? 'border-red-500 bg-red-500/10 text-white' : 'border-transparent text-zinc-400 hover:text-white'}`}
-                >
-                  {tab.title || 'More Info'}
+            <aside className="border-t border-white/10 bg-[#10090a] p-5 sm:p-7 lg:border-l lg:border-t-0">
+              <div className="grid grid-cols-3 gap-3">
+                <button onClick={() => handleScriptReaction('like')} className={`flex h-16 items-center justify-center gap-2 border text-sm font-black transition ${liked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
+                  <ThumbsUp className="h-5 w-5" /> {Number(product.likes || 0)}
                 </button>
-              ))}
-            </div>
-
-            <div className="mt-4 min-h-[280px] border border-white/10 bg-[#09090d] p-5 sm:p-7">
-              {activeTab === 'description' ? (
-                <div className="space-y-7">
-                  <div className="whitespace-pre-wrap break-words text-sm leading-7 text-zinc-300">
-                    {product.description || <span className="text-zinc-500 italic">No description yet.</span>}
-                  </div>
-
-                  {product.scriptCode && (
-                    <div className="border border-white/10 bg-black">
-                      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                        <div className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">Script Code</div>
-                        <button onClick={handleCopyCode} className={`inline-flex min-w-24 items-center justify-center gap-2 px-3 py-1.5 text-xs font-black uppercase text-white transition ${copiedCode ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-500'}`}>
-                          <Copy className="h-3.5 w-3.5" /> {copiedCode ? 'Copied' : 'Copy'}
-                        </button>
-                      </div>
-                      <pre className="max-h-96 overflow-auto p-4 text-sm leading-6 text-zinc-300"><code>{product.scriptCode}</code></pre>
-                    </div>
-                  )}
+                <button onClick={() => handleScriptReaction('dislike')} className={`flex h-16 items-center justify-center gap-2 border text-sm font-black transition ${disliked ? 'border-red-500 bg-red-500/15 text-white' : 'border-white/10 bg-black/35 text-zinc-300 hover:border-red-500/60'}`}>
+                  <ThumbsDown className="h-5 w-5" /> {Number(product.dislikes || 0)}
+                </button>
+                <div className="flex h-16 items-center justify-center gap-2 border border-white/10 bg-black/35 text-sm font-black text-zinc-300">
+                  <MessageCircle className="h-5 w-5" /> {Number(product.commentsCount || comments.length || 0)}
                 </div>
-              ) : activeCustomTab ? (
-                <div className="relative min-h-[300px] overflow-hidden">
-                  <h2 className="mb-4 text-lg font-black uppercase">{activeCustomTab.title || 'More Info'}</h2>
-                  <div className="whitespace-pre-wrap break-words text-sm leading-7 text-zinc-300">
-                    {activeCustomTab.content || 'No content yet.'}
-                  </div>
-                  {(activeCustomTab.images || []).map((image: any) => (
-                    image.url ? (
-                      <div
-                        key={image.id}
-                        className="absolute select-none"
-                        style={{
-                          width: `${image.width || 45}%`,
-                          left: `${image.x ?? 50}%`,
-                          top: `${image.y ?? 140}px`,
-                          transform: 'translate(-50%, -50%)'
-                        }}
-                      >
-                        <img src={image.url} alt="" draggable={false} className="pointer-events-none w-full select-none border border-zinc-800 object-contain shadow-2xl" />
-                      </div>
-                    ) : null
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
+              </div>
 
-          <aside className="border border-white/10 bg-[#09090d] p-6">
-            <div className="mb-3 text-xs font-black uppercase tracking-[0.2em] text-red-400">
-              <BrandName className="text-xs" /> Script
-            </div>
-            <h1 className="text-3xl font-black uppercase tracking-tight text-white">{product.title}</h1>
-            <div className="mt-5 grid grid-cols-3 gap-px border border-white/10 bg-white/10 text-center">
-              <button onClick={handleLike} className="bg-black/40 px-3 py-4 transition hover:bg-red-500/10">
-                <Heart className={`mx-auto mb-2 h-5 w-5 ${liked ? 'fill-red-500 text-red-500' : 'text-zinc-500'}`} />
-                <div className="text-sm font-black">{Number(product.likes || 0)}</div>
+              <button
+                onClick={handleCopyCode}
+                className={`mt-5 flex min-h-14 w-full items-center justify-center gap-2 text-sm font-black uppercase tracking-wide text-white transition ${copiedCode ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-500'}`}
+              >
+                <Copy className="h-4 w-4" /> {copiedCode ? 'Copied' : 'Copy Script'}
               </button>
-              <div className="bg-black/40 px-3 py-4">
-                <MessageCircle className="mx-auto mb-2 h-5 w-5 text-zinc-500" />
-                <div className="text-sm font-black">{Number(product.commentsCount || comments.length || 0)}</div>
-              </div>
-              <div className="bg-black/40 px-3 py-4">
-                <Eye className="mx-auto mb-2 h-5 w-5 text-zinc-500" />
-                <div className="text-sm font-black">{Number(product.views || 0)}</div>
-              </div>
-            </div>
-            <p className="mt-5 text-sm leading-6 text-zinc-400">
-              This script is part of the <BrandName className="inline text-sm" /> hub. Get one key and use it with all supported scripts.
-            </p>
 
-            <Link
-              to="/get-key"
-              className="mt-6 inline-flex w-full min-h-12 items-center justify-center gap-2 bg-red-600 px-6 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-red-500"
-            >
-              Get Key <ExternalLink className="h-4 w-4" />
-            </Link>
-          </aside>
+              <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                {product.gameLink ? (
+                  <a href={product.gameLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300">
+                    <Gamepad2 className="h-4 w-4" /> Play
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center gap-2 text-zinc-600"><Gamepad2 className="h-4 w-4" /> Universal</span>
+                )}
+                {product.gameLink ? (
+                  <a href={product.gameLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300">
+                    <LinkIcon className="h-4 w-4" /> Game Link
+                  </a>
+                ) : null}
+              </div>
+
+              <Link to="/get-key" className="mt-7 inline-flex min-h-12 w-full items-center justify-center gap-2 border border-red-500/30 bg-red-500/10 px-6 text-sm font-black uppercase tracking-wide text-red-200 transition hover:bg-red-600 hover:text-white">
+                Get Key <ArrowRight className="h-4 w-4" />
+              </Link>
+            </aside>
+          </div>
         </section>
 
-        <section className="mt-10 border border-white/10 bg-[#09090d] p-5 sm:p-7">
+        <section className="mt-8 border border-white/10 bg-[#0a0607] p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-3xl font-black">Description</h2>
+              <div className="mt-6 whitespace-pre-wrap break-words text-base leading-8 text-zinc-300">
+                {product.description || <span className="text-zinc-500 italic">No description yet.</span>}
+              </div>
+            </div>
+            <Link to="/get-key" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 bg-red-600 px-6 text-sm font-black uppercase text-white hover:bg-red-500">
+              Get Key
+            </Link>
+          </div>
+
+          {customTabs.length > 0 && (
+            <div className="mt-8 space-y-5 border-t border-white/10 pt-6">
+              {customTabs.map((tab: any) => (
+                <div key={tab.id}>
+                  <h3 className="text-lg font-black">{tab.title || 'More Info'}</h3>
+                  <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-zinc-400">{tab.content || 'No content yet.'}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {product.scriptCode && (
+          <section className="mt-8 overflow-hidden border border-white/10 bg-[#0a0607]">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-xl font-black">Script Code</h2>
+                <span className="text-sm font-bold text-zinc-500">{scriptStats.lines} lines</span>
+                <span className="text-zinc-700">-</span>
+                <span className="text-sm font-bold text-zinc-500">{scriptStats.bytes} B</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleCopyCode} className={`inline-flex min-h-10 items-center justify-center gap-2 px-5 text-sm font-black uppercase text-white transition ${copiedCode ? 'bg-emerald-600' : 'bg-red-600 hover:bg-red-500'}`}>
+                  <Copy className="h-4 w-4" /> {copiedCode ? 'Copied' : 'Copy Code'}
+                </button>
+                <button onClick={downloadScript} className="inline-flex min-h-10 items-center justify-center border border-white/10 px-3 text-zinc-300 hover:bg-white/5" title="Download script">
+                  <Download className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <pre className="m-4 max-h-[32rem] overflow-auto bg-[#16090a] p-5 text-sm leading-7 text-zinc-200"><code>{product.scriptCode}</code></pre>
+          </section>
+        )}
+
+        <section className="mt-8 border border-white/10 bg-[#0a0607] p-5 sm:p-7">
           <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black">Comments</h2>
-            <span className="text-sm font-bold text-zinc-500">{comments.length}</span>
+            <h2 className="text-3xl font-black">Comments</h2>
+            <span className="text-sm font-bold text-zinc-500">{comments.length} comments</span>
           </div>
 
           <div className="mb-6 flex gap-3">
@@ -411,8 +505,6 @@ export default function ProductPage() {
               <CommentBlock
                 key={comment.id}
                 comment={comment}
-                productId={product.id}
-                canDelete={canModerate || comment.userId === user?.uid}
                 busy={busyCommentId === comment.id}
                 replyText={replyText[comment.id] || ''}
                 onReplyTextChange={value => setReplyText(current => ({ ...current, [comment.id]: value }))}
@@ -443,7 +535,6 @@ function CommentBlock({
   canModerate
 }: {
   comment: any;
-  productId: string;
   busy: boolean;
   replyText: string;
   onReplyTextChange: (value: string) => void;
@@ -451,7 +542,6 @@ function CommentBlock({
   onReact: (type: 'like' | 'dislike', replyId?: string) => void;
   onDelete: (replyId?: string) => void;
   currentUserId?: string;
-  canDelete: boolean;
   canModerate: boolean;
 }) {
   return (

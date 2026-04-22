@@ -22,7 +22,7 @@ function stripMarkdown(value: string) {
 
 function getAbsoluteImageUrl(image: string | undefined, origin: string, slug: string) {
   if (!image) {
-    return `${origin}/background.png`;
+    return `${origin}/logo.png`;
   }
 
   if (image.startsWith('http://') || image.startsWith('https://')) {
@@ -71,19 +71,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const product = await getProduct(slug);
 
     if (product) {
-      const title = escapeHtml(`${product.title || 'Product'} | ZXCHUB`);
+      const title = escapeHtml(`${product.title || 'Script'} | ZXCHUB Scripts`);
       const description = escapeHtml(
-        stripMarkdown(product.description || `Buy ${product.title || 'this product'} on ZXCHUB.`).slice(0, 180)
+        stripMarkdown(product.description || `${product.title || 'ZXCHUB'} Roblox script.`).slice(0, 180)
       );
       const image = escapeHtml(getAbsoluteImageUrl(product.image, origin, slug));
-      const url = escapeHtml(`${origin}/product/${slug}`);
+      const url = escapeHtml(`${origin}/script/${slug}`);
 
       html = html.replace(/<title>.*?<\/title>/i, `<title>${title}</title>`);
       html = replaceMetaTag(html, 'name', 'description', `<meta name="description" content="${description}" />`);
-      html = replaceMetaTag(html, 'property', 'og:type', `<meta property="og:type" content="product" />`);
+      html = replaceMetaTag(html, 'property', 'og:type', `<meta property="og:type" content="article" />`);
       html = replaceMetaTag(html, 'property', 'og:title', `<meta property="og:title" content="${title}" />`);
       html = replaceMetaTag(html, 'property', 'og:description', `<meta property="og:description" content="${description}" />`);
       html = replaceMetaTag(html, 'property', 'og:image', `<meta property="og:image" content="${image}" />`);
+      html = replaceMetaTag(html, 'property', 'og:image:width', `<meta property="og:image:width" content="1200" />`);
+      html = replaceMetaTag(html, 'property', 'og:image:height', `<meta property="og:image:height" content="630" />`);
+      html = replaceMetaTag(html, 'property', 'og:site_name', `<meta property="og:site_name" content="ZXCHUB" />`);
       html = replaceMetaTag(html, 'property', 'og:url', `<meta property="og:url" content="${url}" />`);
       html = replaceMetaTag(html, 'name', 'twitter:card', `<meta name="twitter:card" content="summary_large_image" />`);
       html = replaceMetaTag(html, 'name', 'twitter:title', `<meta name="twitter:title" content="${title}" />`);

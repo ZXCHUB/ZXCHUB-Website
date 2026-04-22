@@ -353,10 +353,6 @@ function SettingsTab({ profile, showToast }: { profile: any; showToast: any }) {
           <input value={displayName} onChange={event => setDisplayName(event.target.value)} className="w-full border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500" />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-bold text-zinc-400">Profile Image URL</span>
-          <input value={photoURL} onChange={event => setPhotoURL(event.target.value)} className="w-full border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500" />
-        </label>
-        <label className="block">
           <span className="mb-2 block text-sm font-bold text-zinc-400">Email</span>
           <input value={profile.email} disabled className="w-full border border-white/10 bg-black/40 px-4 py-3 text-zinc-600" />
         </label>

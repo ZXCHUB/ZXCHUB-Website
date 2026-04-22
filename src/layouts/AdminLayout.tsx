@@ -80,16 +80,22 @@ export default function AdminLayout() {
     return <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center text-zinc-400">Loading...</div>;
   }
 
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'moderator' && profile.role !== 'support')) {
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'moderator')) {
     return <Navigate to="/" replace />;
   }
 
-  const isPathActive = (path: string) => location.pathname === path;
   const isPathPrefixActive = (prefix: string) => location.pathname.startsWith(prefix);
-  const isSupport = profile.role === 'moderator' || profile.role === 'support';
+  const isModeratorRole = profile.role === 'moderator';
+  const moderatorAllowedPaths = [
+    '/admin',
+    '/admin/scripts',
+    '/admin/orders/invoices',
+    '/admin/orders/customers',
+    '/admin/orders/tickets'
+  ];
 
-  if (isSupport && location.pathname === '/admin') {
-    return <Navigate to="/admin/orders/tickets" replace />;
+  if (isModeratorRole && !moderatorAllowedPaths.includes(location.pathname)) {
+    return <Navigate to="/admin" replace />;
   }
 
   return (
@@ -105,37 +111,31 @@ export default function AdminLayout() {
 
         <div className="flex-1 overflow-y-auto p-3 space-y-6">
           <div>
-            {!isSupport && (
-              <>
-                <NavItem icon={Home} label="Dashboard" to="/admin" isActive={location.pathname === '/admin'} />
-                
-                <NavItem 
-                  icon={Code2} 
-                  label="Scripts" 
-                  isActive={isPathPrefixActive('/admin/scripts')}
-                  children={[
-                    { label: 'All Scripts', to: '/admin/scripts', icon: Code2 },
-                    { label: 'Key Inventory', to: '/admin/scripts/keys', icon: KeyRound },
-                  ]}
-                />
-              </>
-            )}
+            <NavItem icon={Home} label="Dashboard" to="/admin" isActive={location.pathname === '/admin'} />
+
+            <NavItem 
+              icon={Code2} 
+              label="Scripts" 
+              isActive={isPathPrefixActive('/admin/scripts')}
+              children={[
+                { label: 'All Scripts', to: '/admin/scripts', icon: Code2 },
+                ...(!isModeratorRole ? [{ label: 'Key Inventory', to: '/admin/scripts/keys', icon: KeyRound }] : []),
+              ]}
+            />
             
             <NavItem 
               icon={ListOrdered} 
               label="Orders" 
               isActive={isPathPrefixActive('/admin/orders')}
               children={[
-                ...(!isSupport ? [
-                  { label: 'Invoices', to: '/admin/orders/invoices', icon: Receipt },
-                  { label: 'Customers', to: '/admin/orders/customers', icon: Users },
-                ] : []),
+                { label: 'Invoices', to: '/admin/orders/invoices', icon: Receipt },
+                { label: 'Customers', to: '/admin/orders/customers', icon: Users },
                 { label: 'Tickets', to: '/admin/orders/tickets', icon: Ticket },
               ]}
             />
           </div>
 
-          {!isSupport && (
+          {!isModeratorRole && (
             <div>
               <NavItem 
                 icon={Settings} 
@@ -149,11 +149,6 @@ export default function AdminLayout() {
                   { label: 'Themes', to: '/admin/settings/themes', icon: Palette },
                 ]}
               />
-              <NavItem icon={User} label="Account" to="/profile" isActive={false} />
-            </div>
-          )}
-          {isSupport && (
-            <div>
               <NavItem icon={User} label="Account" to="/profile" isActive={false} />
             </div>
           )}

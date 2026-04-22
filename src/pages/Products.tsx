@@ -8,6 +8,12 @@ import SEO from '../components/SEO';
 import BrandName from '../components/BrandName';
 
 type FilterMode = 'all' | 'free' | 'premium';
+const NEW_SCRIPT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+const isNewScript = (script: any) => {
+  const createdAt = Number(script.createdAt || 0);
+  return createdAt > 0 && Date.now() - createdAt < NEW_SCRIPT_WINDOW_MS;
+};
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
@@ -29,16 +35,24 @@ export default function Products() {
     fetchData();
   }, []);
 
-  const filteredProducts = useMemo(() => products.filter(product => {
-    if (product.slug === 'zxchub-key') return false;
-    if ((product.visibility || 'public') !== 'public') return false;
-    const searchText = `${product.title || ''} ${product.description || ''}`.toLowerCase();
-    if (keyword && !searchText.includes(keyword.toLowerCase())) return false;
+  const filteredProducts = useMemo(() => products
+    .filter(product => {
+      if (product.slug === 'zxchub-key') return false;
+      if ((product.visibility || 'public') !== 'public') return false;
+      const searchText = `${product.title || ''} ${product.description || ''}`.toLowerCase();
+      if (keyword && !searchText.includes(keyword.toLowerCase())) return false;
 
-    if (mode === 'free') return !product.isPaid;
-    if (mode === 'premium') return Boolean(product.isPaid);
-    return true;
-  }), [products, keyword, mode]);
+      if (mode === 'free') return !product.isPaid;
+      if (mode === 'premium') return Boolean(product.isPaid);
+      return true;
+    })
+    .sort((a, b) => {
+      const aNew = isNewScript(a);
+      const bNew = isNewScript(b);
+      if (aNew !== bNew) return aNew ? -1 : 1;
+      if (aNew && bNew) return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+      return Number(b.views || 0) - Number(a.views || 0);
+    }), [products, keyword, mode]);
 
   return (
     <div className="min-h-screen bg-[#050507] text-white">
@@ -111,6 +125,7 @@ export default function Products() {
             {filteredProducts.map(script => {
               const likes = Number(script.likes || 0);
               const views = Number(script.views || 0);
+              const isNew = isNewScript(script);
 
               return (
                 <Link
@@ -128,9 +143,11 @@ export default function Products() {
                       />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
-                    <div className="absolute right-3 top-3 bg-red-950/85 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-red-100 backdrop-blur">
-                      Any Executor
-                    </div>
+                    {isNew ? (
+                      <div className="absolute right-3 top-3 bg-red-600 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-[0_0_22px_rgba(239,68,68,.55)]">
+                        New
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-1 flex-col p-5">

@@ -8,7 +8,7 @@ interface UserProfile {
   email: string;
   displayName: string;
   photoURL: string;
-  role: 'admin' | 'user' | 'moderator' | 'support';
+  role: 'admin' | 'user' | 'moderator';
   discordId?: string;
   discordUsername?: string;
   discordAccessToken?: string;

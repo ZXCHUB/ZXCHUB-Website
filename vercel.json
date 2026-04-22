@@ -6,6 +6,10 @@
   },
   "rewrites": [
     {
+      "source": "/script/:slug",
+      "destination": "/api/product-page?slug=:slug"
+    },
+    {
       "source": "/product/:slug",
       "destination": "/api/product-page?slug=:slug"
     },

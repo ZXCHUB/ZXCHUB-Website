@@ -16,10 +16,7 @@ service cloud.firestore {
     function isModerator() {
       return isAuthenticated() && (
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator' ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'support'
-        )
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'moderator'
       );
     }
     
@@ -33,12 +30,15 @@ service cloud.firestore {
 
     match /products/{productId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin() || (isModerator() && request.resource.data.type == 'script');
+      allow delete: if isAdmin() || (isModerator() && resource.data.type == 'script');
       allow update: if isAdmin() || (
+        isModerator() && resource.data.type == 'script' && request.resource.data.type == 'script'
+      ) || (
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
       ) || (
         isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentsCount', 'views'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'dislikes', 'commentsCount', 'views'])
       );
 
       match /viewers/{sessionId} {
@@ -46,6 +46,11 @@ service cloud.firestore {
       }
 
       match /likes/{userId} {
+        allow read: if true;
+        allow create, delete: if isAuthenticated() && request.auth.uid == userId;
+      }
+
+      match /dislikes/{userId} {
         allow read: if true;
         allow create, delete: if isAuthenticated() && request.auth.uid == userId;
       }
@@ -82,7 +87,7 @@ service cloud.firestore {
     }
 
     match /keys/{keyId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid) || resource.data.isSold == false;
+      allow read: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.ownerId == request.auth.uid) || resource.data.isSold == false;
       allow create: if isAdmin();
       allow update: if isAdmin() || (
         isAuthenticated() && 
@@ -94,7 +99,7 @@ service cloud.firestore {
     }
 
     match /transactions/{txId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin() || isModerator() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -116,7 +121,7 @@ service cloud.firestore {
     }
 
     match /pageviews/{docId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || isModerator();
       allow create: if true;
     }
     match /settings/{docId} {

@@ -19,7 +19,7 @@ export default function AdminTeam() {
 
   const fetchTeam = async () => {
     try {
-      const q = query(collection(db, 'users'), where('role', 'in', ['admin', 'moderator', 'support']));
+      const q = query(collection(db, 'users'), where('role', 'in', ['admin', 'moderator']));
       const snap = await getDocs(q);
       const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setTeam(members);
@@ -163,7 +163,7 @@ export default function AdminTeam() {
                 name="role"
                 className="w-full bg-[#0f172a] border border-[#222b3d] rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500"
               >
-                <option value="moderator">Moderator (Tickets and comments)</option>
+                <option value="moderator">Moderator (Limited admin)</option>
                 <option value="admin">Admin (Full Access)</option>
               </select>
             </div>
@@ -177,7 +177,7 @@ export default function AdminTeam() {
           
           <div className="mt-6 pt-6 border-t border-[#222b3d] text-sm text-slate-400 space-y-2">
             <p><strong>Admin:</strong> Has full access to all settings, scripts, and orders.</p>
-            <p><strong>Moderator:</strong> Can access Tickets and moderate comments.</p>
+            <p><strong>Moderator:</strong> Can access Dashboard, Scripts, Invoices, Customers, Tickets, and delete comments. Settings and Key Inventory stay hidden.</p>
           </div>
         </div>
       </div>

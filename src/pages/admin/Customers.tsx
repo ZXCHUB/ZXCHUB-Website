@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
-import { Check, Copy, Download, KeyRound, Mail, MapPin, Search, Shield, User, X } from 'lucide-react';
+import { Check, Copy, Download, Mail, MapPin, Search, Shield, User, X } from 'lucide-react';
 import { db } from '../../firebase';
 import SEO from '../../components/SEO';
+import { useAuth } from '../../AuthContext';
 
 export default function AdminCustomers() {
+  const { profile } = useAuth();
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [keys, setKeys] = useState<any[]>([]);
@@ -14,6 +16,7 @@ export default function AdminCustomers() {
   const [editRole, setEditRole] = useState('user');
   const [editDisplayName, setEditDisplayName] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const canEditCustomers = profile?.role === 'admin';
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -68,7 +71,7 @@ export default function AdminCustomers() {
   };
 
   const saveCustomer = async () => {
-    if (!selectedCustomer) return;
+    if (!selectedCustomer || !canEditCustomers) return;
     await updateDoc(doc(db, 'users', selectedCustomer.id), {
       role: editRole,
       displayName: editDisplayName
@@ -186,7 +189,7 @@ export default function AdminCustomers() {
                 <button onClick={() => setSelectedCustomer(null)} className="p-2 text-slate-500 hover:text-white"><X className="h-4 w-4" /></button>
               </div>
 
-              {isEditing ? (
+              {canEditCustomers && isEditing ? (
                 <div className="space-y-3">
                   <input value={editDisplayName} onChange={event => setEditDisplayName(event.target.value)} className="w-full border border-slate-800 bg-black px-3 py-2 text-sm outline-none focus:border-red-500" />
                   <select value={editRole} onChange={event => setEditRole(event.target.value)} className="w-full border border-slate-800 bg-black px-3 py-2 text-sm outline-none focus:border-red-500">
@@ -196,8 +199,12 @@ export default function AdminCustomers() {
                   </select>
                   <button onClick={saveCustomer} className="inline-flex items-center gap-2 bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-500"><Check className="h-4 w-4" /> Save</button>
                 </div>
-              ) : (
+              ) : canEditCustomers ? (
                 <button onClick={() => setIsEditing(true)} className="mb-5 border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-white/5">Edit Customer</button>
+              ) : (
+                <div className="mb-5 inline-flex items-center border border-slate-800 bg-black px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                  View only
+                </div>
               )}
 
               <div className="mt-5 border-t border-slate-800 pt-5">
