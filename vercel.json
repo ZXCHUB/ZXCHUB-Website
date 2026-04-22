@@ -1,22 +1,5 @@
 {
-  "functions": {
-    "api/product-page.ts": {
-      "includeFiles": "dist/index.html"
-    }
-  },
   "rewrites": [
-    {
-      "source": "/script/:slug",
-      "destination": "/api/product-page?slug=:slug"
-    },
-    {
-      "source": "/product/:slug",
-      "destination": "/api/product-page?slug=:slug"
-    },
-    {
-      "source": "/api/product-image",
-      "destination": "/api/product-image/index"
-    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
