@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { addDiscordGuildMember, getUsableDiscordAccessToken } from '../_lib/discord.js';
 import { getAdminDb } from '../_lib/firebase-admin.js';
 import type { ApiRequest, ApiResponse } from '../_lib/http.js';
 
@@ -38,16 +39,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     try {
-      await axios.put(
-        `https://discord.com/api/guilds/${settings.guildId}/members/${user.discordId}`,
-        { access_token: user.discordAccessToken },
-        {
-          headers: {
-            Authorization: `Bot ${settings.token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const accessToken = await getUsableDiscordAccessToken(settings, user, userSnap.ref);
+      await addDiscordGuildMember(settings, user.discordId, accessToken);
     } catch (error: any) {
       console.log('Discord guild join skipped or failed:', error.response?.data || error.message);
     }

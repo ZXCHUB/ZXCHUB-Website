@@ -7,6 +7,9 @@ import path from 'path';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from './src/firebase';
 import axios from 'axios';
+import { getAuth } from 'firebase-admin/auth';
+import { addDiscordGuildMember, getUsableDiscordAccessToken } from './api/_lib/discord';
+import { getAdminDb } from './api/_lib/firebase-admin';
 
 dotenv.config();
 
@@ -359,6 +362,97 @@ app.post('/api/discord/give-role', async (req, res) => {
   } catch (err: any) {
     console.error("Discord give role error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/discord/force-rejoin', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+    if (!idToken) {
+      return res.status(403).json({ error: 'Missing admin token.' });
+    }
+
+    const decoded = await getAuth().verifyIdToken(idToken);
+    const adminDb = getAdminDb();
+    const adminUserSnap = await adminDb.collection('users').doc(decoded.uid).get();
+    const role = adminUserSnap.data()?.role;
+
+    if (role !== 'admin' && decoded.email !== 'zxchubadmin@gmail.com') {
+      return res.status(403).json({ error: 'Admin access is required.' });
+    }
+
+    const settingsSnap = await adminDb.collection('settings').doc('discord').get();
+    const settings = settingsSnap.data();
+
+    if (!settings?.token || !settings?.guildId || !settings?.appId || !settings?.clientSecret) {
+      return res.status(400).json({
+        error: 'Discord Bot Token, Server ID, Application ID, and Client Secret are required before Force Rejoin.'
+      });
+    }
+
+    const usersSnap = await adminDb.collection('users').get();
+    const results: Array<{
+      userId: string;
+      discordUsername?: string;
+      status: 'joined' | 'skipped' | 'failed';
+      reason?: string;
+    }> = [];
+
+    for (const userDoc of usersSnap.docs) {
+      const user = userDoc.data();
+
+      if (!user.discordId) {
+        results.push({ userId: userDoc.id, status: 'skipped', reason: 'No linked Discord account.' });
+        continue;
+      }
+
+      if (!user.discordAccessToken && !user.discordRefreshToken) {
+        results.push({
+          userId: userDoc.id,
+          discordUsername: user.discordUsername,
+          status: 'skipped',
+          reason: 'Missing Discord OAuth token.'
+        });
+        continue;
+      }
+
+      try {
+        const accessToken = await getUsableDiscordAccessToken(settings, user, userDoc.ref);
+        await addDiscordGuildMember(settings, user.discordId, accessToken);
+        results.push({
+          userId: userDoc.id,
+          discordUsername: user.discordUsername,
+          status: 'joined'
+        });
+      } catch (error: any) {
+        results.push({
+          userId: userDoc.id,
+          discordUsername: user.discordUsername,
+          status: 'failed',
+          reason: error.response?.data?.message || error.response?.data?.error_description || error.message || 'Discord join failed.'
+        });
+      }
+    }
+
+    const summary = results.reduce(
+      (acc, item) => {
+        acc[item.status] += 1;
+        return acc;
+      },
+      { joined: 0, skipped: 0, failed: 0 }
+    );
+
+    res.json({
+      success: true,
+      guildInvite: settings.guildInvite || 'https://discord.gg/zxchub',
+      summary,
+      results: results.slice(0, 100)
+    });
+  } catch (err: any) {
+    console.error('Discord force rejoin error:', err.response?.data || err.message);
+    res.status(500).json({ error: err.message || 'Force rejoin failed.' });
   }
 });
 

@@ -71,6 +71,26 @@ const getScriptStats = (code?: string) => {
   };
 };
 
+const tokenize = (value?: string) => (
+  (value || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(word => word.length > 2)
+);
+
+const getRelatedScore = (current: any, candidate: any) => {
+  let score = 0;
+  if (current.gameLink && candidate.gameLink && current.gameLink === candidate.gameLink) score += 80;
+  const currentWords = new Set([...tokenize(current.title), ...tokenize(current.description)]);
+  const candidateWords = new Set([...tokenize(candidate.title), ...tokenize(candidate.description)]);
+  candidateWords.forEach(word => {
+    if (currentWords.has(word)) score += 8;
+  });
+  score += Math.min(20, Number(candidate.views || 0) / 25);
+  score += Math.min(10, Number(candidate.likes || 0));
+  return score;
+};
+
 export default function ProductPage() {
   const { slug } = useParams();
   const { user, profile, login } = useAuth();
@@ -84,6 +104,7 @@ export default function ProductPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [shared, setShared] = useState(false);
   const [busyCommentId, setBusyCommentId] = useState('');
+  const [relatedScripts, setRelatedScripts] = useState<any[]>([]);
 
   const canModerate = canModerateComments(profile?.role);
 
@@ -133,6 +154,35 @@ export default function ProductPage() {
     }
 
     fetchComments(product.id).catch(() => setComments([]));
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (!product?.id) return;
+
+    const fetchRelatedScripts = async () => {
+      const snap = await getDocs(collection(db, 'products'));
+      const candidates = snap.docs
+        .map(item => ({ id: item.id, ...item.data() } as any))
+        .filter(item => (
+          item.id !== product.id &&
+          item.slug !== product.slug &&
+          item.slug !== 'zxchub-key' &&
+          item.visibility !== 'private'
+        ));
+
+      const scored = candidates
+        .map(item => ({ ...item, relatedScore: getRelatedScore(product, item) }))
+        .sort((a, b) => (
+          b.relatedScore - a.relatedScore ||
+          Number(b.views || 0) - Number(a.views || 0) ||
+          Number(b.createdAt || 0) - Number(a.createdAt || 0)
+        ))
+        .slice(0, 3);
+
+      setRelatedScripts(scored);
+    };
+
+    fetchRelatedScripts().catch(() => setRelatedScripts([]));
   }, [product?.id]);
 
   useEffect(() => {
@@ -197,6 +247,7 @@ export default function ProductPage() {
     userId: user!.uid,
     userName: profile?.displayName || user?.email || 'User',
     userPhoto: profile?.photoURL || '',
+    userRole: profile?.role || 'user',
     text,
     likes: 0,
     dislikes: 0,
@@ -505,6 +556,26 @@ export default function ProductPage() {
           </section>
         )}
 
+        {relatedScripts.length > 0 && (
+          <section className="mt-8 border border-white/10 bg-[#08080b] p-5 sm:p-7">
+            <div className="mb-5 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-black">Related Scripts</h2>
+                <p className="mt-1 text-sm text-zinc-500">More ZXCHUB scripts matched by game, title, and popularity.</p>
+              </div>
+              <Link to="/scripts" className="hidden text-sm font-bold text-red-300 transition hover:text-white sm:inline-flex">
+                Browse all
+              </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {relatedScripts.map(script => (
+                <RelatedScriptCard key={script.id} script={script} />
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="mt-8 border border-white/10 bg-[#08080b] p-5 sm:p-7">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="text-3xl font-black">Comments</h2>
@@ -543,6 +614,33 @@ export default function ProductPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+function RelatedScriptCard({ script }: { script: any }) {
+  const href = `/script/${script.slug || script.id}`;
+  return (
+    <Link to={href} className="group overflow-hidden border border-white/10 bg-black transition hover:border-red-500/50 hover:bg-[#120708]">
+      <div className="relative aspect-video bg-zinc-900">
+        {script.image ? (
+          <img src={script.image} alt={script.title} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-red-600 font-black">ZXCHUB</div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/80 to-transparent" />
+        <div className="absolute bottom-3 left-3 flex items-center gap-3 text-xs font-bold text-zinc-300">
+          <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5 text-red-400" /> {Number(script.views || 0)}</span>
+          <span className="inline-flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5 text-red-400" /> {Number(script.likes || 0)}</span>
+        </div>
+      </div>
+      <div className="p-4">
+        <h3 className="line-clamp-2 text-lg font-black leading-tight text-white">{script.title || 'ZXCHUB Script'}</h3>
+        <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">{script.description || 'Explore another supported ZXCHUB script.'}</p>
+        <div className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase tracking-wide text-red-300">
+          View Script <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -619,13 +717,17 @@ function CommentBody({
   onDelete: () => void;
   canDelete: boolean;
 }) {
+  const role = item.userRole === 'admin' || item.userRole === 'moderator' ? item.userRole : '';
   return (
     <div className={compact ? 'border border-white/10 bg-[#08080b] p-3' : ''}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {item.userPhoto ? <img src={item.userPhoto} alt="" className="h-8 w-8 rounded-full object-cover" /> : <div className="h-8 w-8 rounded-full bg-zinc-800" />}
           <div>
-            <div className="text-sm font-black">{item.userName || 'User'}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-black">{item.userName || 'User'}</span>
+              {role && <RoleBadge role={role} />}
+            </div>
             <div className="text-xs text-zinc-600">{new Date(item.createdAt || Date.now()).toLocaleString()}</div>
           </div>
         </div>
@@ -645,5 +747,16 @@ function CommentBody({
         </button>
       </div>
     </div>
+  );
+}
+
+function RoleBadge({ role }: { role: 'admin' | 'moderator' }) {
+  const isAdmin = role === 'admin';
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${
+      isAdmin ? 'bg-red-500/15 text-red-300 ring-1 ring-red-500/30' : 'bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/30'
+    }`}>
+      {isAdmin ? 'Admin' : 'Moderator'}
+    </span>
   );
 }

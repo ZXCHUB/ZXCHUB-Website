@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { 
   DollarSign, ShoppingCart, Users, Activity, Eye, Globe, 
-  CornerUpLeft, Clock, Calendar, Settings, ChevronDown
+  Calendar, Settings, ChevronDown, CheckCircle2, AlertTriangle, XCircle, KeyRound, MessageSquare
 } from 'lucide-react';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import SEO from '../../components/SEO';
+import { PAID_WEB_KEY_PLANS } from '../../keyPlans';
 
 type DateRange = 'today' | 'last_week' | 'last_month' | 'last_3_months' | 'last_year' | 'all_time';
 
@@ -35,6 +36,10 @@ export default function AdminDashboard() {
   const [revenueChartData, setRevenueChartData] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [allKeys, setAllKeys] = useState<any[]>([]);
+  const [allTickets, setAllTickets] = useState<any[]>([]);
+  const [paymentSettings, setPaymentSettings] = useState<any>(null);
+  const [discordSettings, setDiscordSettings] = useState<any>(null);
 
   const [trafficChartData, setTrafficChartData] = useState<any[]>([]);
 
@@ -65,12 +70,30 @@ export default function AdminDashboard() {
     const unsubActivity = onSnapshot(query(collection(db, 'auditLogs'), orderBy('createdAt', 'desc'), limit(8)), (snap) => {
       setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
     });
+    const unsubKeys = onSnapshot(collection(db, 'keys'), (snap) => {
+      setAllKeys(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    });
+    const unsubTickets = onSnapshot(collection(db, 'tickets'), (snap) => {
+      setAllTickets(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+    });
+
+    Promise.all([
+      getDoc(doc(db, 'settings', 'payments')),
+      getDoc(doc(db, 'settings', 'discord'))
+    ]).then(([paymentsSnap, discordSnap]) => {
+      setPaymentSettings(paymentsSnap.exists() ? paymentsSnap.data() : null);
+      setDiscordSettings(discordSnap.exists() ? discordSnap.data() : null);
+    }).catch(error => {
+      console.error('Failed to load health settings', error);
+    });
 
     return () => {
       unsubTx();
       unsubUsers();
       unsubPv();
       unsubActivity();
+      unsubKeys();
+      unsubTickets();
     };
   }, []);
 
@@ -342,6 +365,14 @@ export default function AdminDashboard() {
             <StatCard title="New Customers" value={stats.customers.toString()} icon={Users} trend="" />
           </div>
 
+          <HealthCheckPanel
+            keys={allKeys}
+            tickets={allTickets}
+            transactions={allTransactions}
+            paymentSettings={paymentSettings}
+            discordSettings={discordSettings}
+          />
+
           <ActivityLogPanel logs={activityLogs} />
 
           {/* Chart */}
@@ -514,6 +545,118 @@ function formatAction(action: string) {
     reply_delete: 'Deleted reply'
   };
   return labels[action] || action.replace(/_/g, ' ');
+}
+
+type HealthStatus = 'healthy' | 'warning' | 'danger';
+
+function getPaymentStatus(settings: any, provider: 'stripe' | 'paypal') {
+  const data = settings?.[provider];
+  if (!data?.enabled) return { status: 'warning' as HealthStatus, detail: 'Disabled in settings' };
+  if (provider === 'stripe') {
+    return data.apiKey
+      ? { status: 'healthy' as HealthStatus, detail: data.pubKey ? 'Enabled with keys' : 'Secret key set, publishable key optional' }
+      : { status: 'danger' as HealthStatus, detail: 'Missing secret key' };
+  }
+  return data.clientId && data.secret
+    ? { status: 'healthy' as HealthStatus, detail: 'Enabled with client and secret' }
+    : { status: 'danger' as HealthStatus, detail: 'Missing client ID or secret' };
+}
+
+function getDiscordStatus(settings: any) {
+  if (!settings) return { status: 'danger' as HealthStatus, detail: 'Discord settings missing' };
+  const required = ['token', 'appId', 'clientSecret', 'guildId', 'roleId'];
+  const missing = required.filter(key => !settings[key]);
+  if (missing.length === 0) return { status: 'healthy' as HealthStatus, detail: 'Bot, OAuth, server, and role configured' };
+  return { status: missing.length > 2 ? 'danger' as HealthStatus : 'warning' as HealthStatus, detail: `Missing ${missing.join(', ')}` };
+}
+
+function HealthCheckPanel({
+  keys,
+  tickets,
+  transactions,
+  paymentSettings,
+  discordSettings
+}: {
+  keys: any[];
+  tickets: any[];
+  transactions: any[];
+  paymentSettings: any;
+  discordSettings: any;
+}) {
+  const stripe = getPaymentStatus(paymentSettings, 'stripe');
+  const paypal = getPaymentStatus(paymentSettings, 'paypal');
+  const discord = getDiscordStatus(discordSettings);
+  const activeTickets = tickets.filter(ticket => ticket.status !== 'closed').length;
+  const unsoldKeysByPlan = PAID_WEB_KEY_PLANS.map(plan => {
+    const stock = keys.filter(key => key.variantId === plan.id && !key.isSold && !key.deletedByAdmin).length;
+    return { ...plan, stock };
+  });
+  const lowStock = unsoldKeysByPlan.filter(plan => plan.stock <= 3);
+  const totalUnsoldKeys = unsoldKeysByPlan.reduce((sum, plan) => sum + plan.stock, 0);
+  const keyStatus = totalUnsoldKeys === 0
+    ? { status: 'danger' as HealthStatus, detail: 'No paid keys in stock' }
+    : lowStock.length > 0
+      ? { status: 'warning' as HealthStatus, detail: `Low stock: ${lowStock.map(plan => `${plan.name} (${plan.stock})`).join(', ')}` }
+      : { status: 'healthy' as HealthStatus, detail: `${totalUnsoldKeys} unsold paid keys ready` };
+  const ticketStatus = activeTickets > 10
+    ? { status: 'warning' as HealthStatus, detail: `${activeTickets} active tickets need attention` }
+    : { status: 'healthy' as HealthStatus, detail: `${activeTickets} active tickets` };
+  const orderStatus = transactions.length > 0
+    ? { status: 'healthy' as HealthStatus, detail: `${transactions.length} transactions recorded` }
+    : { status: 'warning' as HealthStatus, detail: 'No transactions yet' };
+
+  const items = [
+    { label: 'Stripe', icon: DollarSign, ...stripe },
+    { label: 'PayPal', icon: ShoppingCart, ...paypal },
+    { label: 'Discord Bot', icon: Globe, ...discord },
+    { label: 'Key Stock', icon: KeyRound, ...keyStatus },
+    { label: 'Support Queue', icon: MessageSquare, ...ticketStatus },
+    { label: 'Orders', icon: Activity, ...orderStatus }
+  ];
+
+  return (
+    <div className="bg-[#161d2b] border border-[#222b3d] rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between border-b border-[#222b3d] p-6">
+        <div>
+          <h3 className="text-lg font-bold">Health Check</h3>
+          <p className="mt-1 text-sm text-slate-500">Live readiness for payments, Discord, keys, and support.</p>
+        </div>
+        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+      </div>
+      <div className="grid gap-px bg-[#222b3d] md:grid-cols-2 xl:grid-cols-3">
+        {items.map(item => (
+          <HealthCheckItem key={item.label} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HealthCheckItem({ item }: { item: { label: string; detail: string; status: HealthStatus; icon: any } }) {
+  const Icon = item.icon;
+  const statusClass = item.status === 'healthy'
+    ? 'text-emerald-300 bg-emerald-500/10'
+    : item.status === 'warning'
+      ? 'text-orange-300 bg-orange-500/10'
+      : 'text-red-300 bg-red-500/10';
+  const StatusIcon = item.status === 'healthy' ? CheckCircle2 : item.status === 'warning' ? AlertTriangle : XCircle;
+
+  return (
+    <div className="bg-[#161d2b] p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1e293b]">
+            <Icon className="h-4 w-4 text-slate-400" />
+          </div>
+          <div className="font-bold text-white">{item.label}</div>
+        </div>
+        <span className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-black uppercase tracking-wide ${statusClass}`}>
+          <StatusIcon className="h-3.5 w-3.5" /> {item.status}
+        </span>
+      </div>
+      <p className="text-sm leading-6 text-slate-400">{item.detail}</p>
+    </div>
+  );
 }
 
 function ActivityLogPanel({ logs }: { logs: any[] }) {
