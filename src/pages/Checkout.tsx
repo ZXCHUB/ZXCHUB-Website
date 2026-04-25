@@ -145,7 +145,11 @@ export default function Checkout() {
 
     const verifySession = async () => {
       try {
-        const existing = await getDocs(query(collection(db, 'transactions'), where('sessionId', '==', sessionId)));
+        const existing = await getDocs(query(
+          collection(db, 'transactions'),
+          where('sessionId', '==', sessionId),
+          where('userId', '==', user.uid)
+        ));
         if (!existing.empty) {
           navigate(`/order/${existing.docs[0].id}`, { replace: true });
           return;
