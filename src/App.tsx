@@ -80,6 +80,7 @@ export default function App() {
             <Route path="/scripts" element={<Products />} />
             <Route path="/products" element={<NavigateTo to="/scripts" />} />
             <Route path="/get-key" element={<GetKey />} />
+            <Route path="/getkey" element={<NavigateTo to="/get-key" />} />
             <Route path="/vote/:slug" element={<VotePage />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/script/:slug" element={<ProductPage />} />
